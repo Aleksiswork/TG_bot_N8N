@@ -1,0 +1,5 @@
+"400 - "{\"detail\":\"The requested model does not support Chat Completions API. Supported models: 
+['meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8', 'Qwen/QwQ-32B', 'meta-llama/Llama-3.2-90B-Vision-Instruct',
+ 'deepseek-ai/DeepSeek-R1-Distill-Llama-70B', 'deepseek-ai/DeepSeek-R1-Distill-Qwen-32B', 'meta-llama/Llama-3.3-70B-Instruct', 
+'Qwen/Qwen2-VL-7B-Instruct', 'databricks/dbrx-instruct', 'mistralai/Ministral-8B-Instruct-2410', 'netease-youdao/Confucius-o1-14B',
+ 'nvidia/AceMath-7B-Instruct', 'google/gemma-3-27b-it', 'neuralmagic/Llama-3.1-Nemotron-70B-Instruct-HF-FP8-dynamic', 'mistralai/Mistral-Large-Instruct-2411', 'microsoft/phi-4', 'SentientAGI/Dobby-Mini-Unhinged-Llama-3.1-8B', 'watt-ai/watt-tool-70B', 'bespokelabs/Bespoke-Stratos-32B', 'NovaSky-AI/Sky-T1-32B-Preview', 'tiiuae/Falcon3-10B-Instruct', 'THUDM/glm-4-9b-chat', 'Qwen/Qwen2.5-Coder-32B-Instruct', 'CohereForAI/aya-expanse-32b', 'jinaai/ReaderLM-v2', 'openbmb/MiniCPM3-4B', 'Qwen/Qwen2.5-1.5B-Instruct', 'ozone-ai/0x-lite', 'microsoft/Phi-3.5-mini-instruct', 'ibm-granite/granite-3.1-8b-instruct']\"}"",
