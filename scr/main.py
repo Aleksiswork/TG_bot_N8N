@@ -1,5 +1,5 @@
 """
-Telegram Bot v1.3
+Telegram Bot v1.4
 Обновления:
 Надежный экспорт в CSV с правильным форматированием
 Проверку размера файла
@@ -7,10 +7,7 @@ Telegram Bot v1.3
 Автоматическую очистку временных файлов
 
 Функционал:
-- Проверка подписки на канал
-- Раздача гайдов (!БД, !Фишки)
-- Админ-команды (/stats, /version)
-- Хранение пользователей в SQLite
+- Добавил 2 гайда (Установка N8N и Фаервол и ssh-keygen)
 """
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
@@ -51,7 +48,7 @@ if missing_vars:
         f"Отсутствуют обязательные переменные в .env: {', '.join(missing_vars)}")
 
 # Конфигурация
-BOT_VERSION = "1.3"
+BOT_VERSION = "1.4"
 CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")
 CHANNEL_LINK = os.getenv("CHANNEL_LINK")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -98,7 +95,8 @@ def get_main_keyboard(user_id: int):
     """Главное меню (разное для админа и пользователей)"""
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="!БД"), KeyboardButton(text="!Фишки")],
+            [KeyboardButton(text="Установка БД"), KeyboardButton(
+                text="Фишки"), KeyboardButton(text="Установка N8N"), KeyboardButton(text="Фаервол и ssh-keygen"), ],
         ],
         resize_keyboard=True
     )
@@ -372,7 +370,7 @@ async def process_broadcast_message(message: types.Message, state: FSMContext):
         )
 
 
-@dp.message(F.text == '!БД')
+@dp.message(F.text == 'Установка БД')
 async def send_db_guide(message: types.Message):
     """Отправка гайда по базам данных"""
     await save_user(message.from_user)
@@ -396,7 +394,31 @@ async def send_db_guide(message: types.Message):
         await message.answer(f"❌ Ошибка: {str(e)}")
 
 
-@dp.message(F.text == '!Фишки')
+@dp.message(F.text == 'Фаервол и ssh-keygen')
+async def send_db_guide(message: types.Message):
+    """Отправка гайда Фаервол и ssh-keygen"""
+    await save_user(message.from_user)
+
+    if not await check_subscription(message.from_user.id):
+        await message.answer(
+            "❌ Для доступа к материалам необходимо подписаться на канал!",
+            reply_markup=get_subscribe_keyboard()
+        )
+        return
+
+    file_path = os.path.join(FILES_DIR, 'bonus.pdf')
+    try:
+        if not os.path.exists(file_path):
+            raise FileNotFoundError
+        document = FSInputFile(file_path, filename="bonus.pdf")
+        await message.answer_document(document, caption="📚 Гайд по установке фаервола и ssh-keygen")
+    except FileNotFoundError:
+        await message.answer("⚠️ Файл с гайдом временно недоступен.")
+    except Exception as e:
+        await message.answer(f"❌ Ошибка: {str(e)}")
+
+
+@dp.message(F.text == 'Фишки')
 async def send_tips(message: types.Message):
     """Отправка полезных фишек"""
     await save_user(message.from_user)
@@ -409,6 +431,24 @@ async def send_tips(message: types.Message):
         return
 
     await message.answer("Здесь будут полезные фишки...")
+
+
+@dp.message(F.text == 'Установка N8N')
+async def send_tips(message: types.Message):
+    """Отправка полезных фишек"""
+    await save_user(message.from_user)
+
+    file_path = os.path.join(FILES_DIR, 'install.pdf')
+    try:
+        if not os.path.exists(file_path):
+            raise FileNotFoundError
+        document = FSInputFile(file_path, filename="install.pdf")
+        await message.answer_document(document, caption="📚 Гайд по установке N8N на сервер")
+    except FileNotFoundError:
+        await message.answer("⚠️ Файл с гайдом временно недоступен.")
+    except Exception as e:
+        await message.answer(f"❌ Ошибка: {str(e)}")
+
 
 # ======================
 # ЗАПУСК БОТА
