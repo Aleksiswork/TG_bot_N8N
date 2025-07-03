@@ -24,6 +24,7 @@ import asyncio
 import logging
 import os
 import aiosqlite
+import csv
 from datetime import datetime
 
 
@@ -42,6 +43,8 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 FILES_DIR = "d:/vps/VSCode/tgbot/files/"
 DB_NAME = "bot_users.db"
+
+os.makedirs(FILES_DIR, exist_ok=True)  # Создаст папку если её нет
 
 # Настройка логирования
 logging.basicConfig(
@@ -91,6 +94,7 @@ def get_admin_keyboard():
             [KeyboardButton(text="📊 Статистика"),
              KeyboardButton(text="🔄 Версия бота")],
             [KeyboardButton(text="✉️ Сообщение пользователям")],
+            [KeyboardButton(text="📁 Выгрузить БД (CSV)")],
             [KeyboardButton(text="⬅️ Назад")]
         ],
         resize_keyboard=True
@@ -136,6 +140,83 @@ async def save_user(user: types.User):
             )
         await db.commit()
 
+
+# ======================
+# ВЫГРУЗКА БД
+# ======================
+
+
+@dp.message(F.text == '📁 Выгрузить БД (CSV)')
+async def export_db_csv_handler(message: types.Message):
+    """Улучшенный экспорт в CSV с гарантией правильного отображения столбцов"""
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    temp_file = None
+    try:
+        # Подготовка файла
+        os.makedirs(FILES_DIR, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"bot_users_export_{timestamp}.csv"
+        temp_file = os.path.join(FILES_DIR, filename)
+
+        # Получение данных
+        async with aiosqlite.connect(DB_NAME) as db:
+            cursor = await db.execute("SELECT * FROM users")
+            users = await cursor.fetchall()
+
+            if not users:
+                await message.answer("🔄 База данных пуста")
+                return
+
+            # Создаем CSV с настройками для Excel
+            with open(temp_file, 'w', encoding='utf-8-sig', newline='') as f:
+                # Явно указываем разделитель и другие параметры
+                writer = csv.writer(f,
+                                    delimiter=';',  # Используем точку с запятой
+                                    quoting=csv.QUOTE_ALL)  # Все значения в кавычках
+
+                # Заголовки
+                writer.writerow([
+                    'ID', 'Username', 'Имя',
+                    'Фамилия', 'Дата регистрации', 'Последняя активность'
+                ])
+
+                # Данные
+                for user in users:
+                    writer.writerow([
+                        user[0],  # ID
+                        f'"{user[1]}"' if user[1] else '',  # Username
+                        f'"{user[2]}"' if user[2] else '',  # Имя
+                        f'"{user[3]}"' if user[3] else '',  # Фамилия
+                        user[4],  # Дата регистрации
+                        user[5]   # Последняя активность
+                    ])
+
+        # Проверка размера файла
+        file_size = os.path.getsize(temp_file) / (1024 * 1024)
+        if file_size > 45:
+            await message.answer("⚠️ Файл слишком большой для отправки (>45 МБ)")
+            return
+
+        # Отправка файла с инструкцией
+        document = FSInputFile(temp_file, filename=filename)
+        sent_msg = await message.answer_document(
+            document,
+            caption=(
+                f"📊 Экспорт БД ({len(users)} записей)\n"
+                f"ℹ️ Для корректного открытия:\n"
+                f"1. В Excel: 'Данные' → 'Из текста/CSV'\n"
+                f"2. Укажите кодировку UTF-8 и разделитель ';'"
+            )
+        )
+
+    except Exception as e:
+        await message.answer(f"❌ Ошибка экспорта: {str(e)}")
+        logger.exception("Export error:")
+    finally:
+        if temp_file and os.path.exists(temp_file):
+            os.remove(temp_file)
 # ======================
 # ОСНОВНЫЕ ФУНКЦИИ
 # ======================
