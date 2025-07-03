@@ -1,5 +1,11 @@
 """
-Telegram Bot v1.0
+Telegram Bot v1.3
+Обновления:
+Надежный экспорт в CSV с правильным форматированием
+Проверку размера файла
+Инструкцию по открытию
+Автоматическую очистку временных файлов
+
 Функционал:
 - Проверка подписки на канал
 - Раздача гайдов (!БД, !Фишки)
@@ -36,7 +42,7 @@ class BroadcastState(StatesGroup):
 load_dotenv()
 
 # Конфигурация бота
-BOT_VERSION = "1.2"
+BOT_VERSION = "1.3"
 CHANNEL_USERNAME = "@Info_IT_news"
 CHANNEL_LINK = "https://t.me/Info_IT_news"
 BOT_TOKEN = os.getenv("BOT_TOKEN")
