@@ -12,8 +12,6 @@ Telegram Bot v1.3
 - Админ-команды (/stats, /version)
 - Хранение пользователей в SQLite
 """
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.fsm.context import FSMContext
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import (
@@ -21,10 +19,12 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     InlineKeyboardButton,
     ReplyKeyboardMarkup,
-    ReplyKeyboardRemove,
-    KeyboardButton
+    KeyboardButton,
+    ReplyKeyboardRemove
 )
 from aiogram.enums import ChatMemberStatus
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.context import FSMContext
 from dotenv import load_dotenv
 import asyncio
 import logging
@@ -33,24 +33,34 @@ import aiosqlite
 import csv
 from datetime import datetime
 
-
-class BroadcastState(StatesGroup):
-    waiting_message = State()
-
-
 # Загрузка переменных окружения
 load_dotenv()
 
-# Конфигурация бота
+# Проверка обязательных переменных
+required_vars = {
+    'BOT_TOKEN': os.getenv("BOT_TOKEN"),
+    'ADMIN_ID': os.getenv("ADMIN_ID"),
+    'CHANNEL_USERNAME': os.getenv("CHANNEL_USERNAME"),
+    'CHANNEL_LINK': os.getenv("CHANNEL_LINK"),
+    'FILES_DIR': os.getenv("FILES_DIR")
+}
+
+missing_vars = [name for name, value in required_vars.items() if not value]
+if missing_vars:
+    raise ValueError(
+        f"Отсутствуют обязательные переменные в .env: {', '.join(missing_vars)}")
+
+# Конфигурация
 BOT_VERSION = "1.3"
-CHANNEL_USERNAME = "@Info_IT_news"
-CHANNEL_LINK = "https://t.me/Info_IT_news"
+CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")
+CHANNEL_LINK = os.getenv("CHANNEL_LINK")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
-FILES_DIR = "d:/vps/VSCode/tgbot/files/"
+FILES_DIR = os.getenv("FILES_DIR").replace('\\', '/')  # Нормализация путей
 DB_NAME = "bot_users.db"
 
-os.makedirs(FILES_DIR, exist_ok=True)  # Создаст папку если её нет
+# Создаем папку для файлов если не существует
+os.makedirs(FILES_DIR, exist_ok=True)
 
 # Настройка логирования
 logging.basicConfig(
@@ -58,6 +68,13 @@ logging.basicConfig(
     format=f'%(asctime)s - %(name)s - v{BOT_VERSION} - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Состояния FSM
+
+
+class BroadcastState(StatesGroup):
+    waiting_message = State()
+
 
 # Инициализация бота
 bot = Bot(token=BOT_TOKEN)
@@ -86,7 +103,6 @@ def get_main_keyboard(user_id: int):
         resize_keyboard=True
     )
 
-    # Добавляем кнопку управления только для админа
     if user_id == ADMIN_ID:
         keyboard.keyboard.append([KeyboardButton(text="⚙️ Управление")])
 
@@ -94,13 +110,13 @@ def get_main_keyboard(user_id: int):
 
 
 def get_admin_keyboard():
-    """Админ-панель с кнопкой рассылки"""
+    """Админ-панель"""
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📊 Статистика"),
              KeyboardButton(text="🔄 Версия бота")],
-            [KeyboardButton(text="✉️ Сообщение пользователям")],
             [KeyboardButton(text="📁 Выгрузить БД (CSV)")],
+            [KeyboardButton(text="✉️ Сообщение пользователям")],
             [KeyboardButton(text="⬅️ Назад")]
         ],
         resize_keyboard=True
@@ -146,83 +162,6 @@ async def save_user(user: types.User):
             )
         await db.commit()
 
-
-# ======================
-# ВЫГРУЗКА БД
-# ======================
-
-
-@dp.message(F.text == '📁 Выгрузить БД (CSV)')
-async def export_db_csv_handler(message: types.Message):
-    """Улучшенный экспорт в CSV с гарантией правильного отображения столбцов"""
-    if message.from_user.id != ADMIN_ID:
-        return
-
-    temp_file = None
-    try:
-        # Подготовка файла
-        os.makedirs(FILES_DIR, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"bot_users_export_{timestamp}.csv"
-        temp_file = os.path.join(FILES_DIR, filename)
-
-        # Получение данных
-        async with aiosqlite.connect(DB_NAME) as db:
-            cursor = await db.execute("SELECT * FROM users")
-            users = await cursor.fetchall()
-
-            if not users:
-                await message.answer("🔄 База данных пуста")
-                return
-
-            # Создаем CSV с настройками для Excel
-            with open(temp_file, 'w', encoding='utf-8-sig', newline='') as f:
-                # Явно указываем разделитель и другие параметры
-                writer = csv.writer(f,
-                                    delimiter=';',  # Используем точку с запятой
-                                    quoting=csv.QUOTE_ALL)  # Все значения в кавычках
-
-                # Заголовки
-                writer.writerow([
-                    'ID', 'Username', 'Имя',
-                    'Фамилия', 'Дата регистрации', 'Последняя активность'
-                ])
-
-                # Данные
-                for user in users:
-                    writer.writerow([
-                        user[0],  # ID
-                        f'"{user[1]}"' if user[1] else '',  # Username
-                        f'"{user[2]}"' if user[2] else '',  # Имя
-                        f'"{user[3]}"' if user[3] else '',  # Фамилия
-                        user[4],  # Дата регистрации
-                        user[5]   # Последняя активность
-                    ])
-
-        # Проверка размера файла
-        file_size = os.path.getsize(temp_file) / (1024 * 1024)
-        if file_size > 45:
-            await message.answer("⚠️ Файл слишком большой для отправки (>45 МБ)")
-            return
-
-        # Отправка файла с инструкцией
-        document = FSInputFile(temp_file, filename=filename)
-        sent_msg = await message.answer_document(
-            document,
-            caption=(
-                f"📊 Экспорт БД ({len(users)} записей)\n"
-                f"ℹ️ Для корректного открытия:\n"
-                f"1. В Excel: 'Данные' → 'Из текста/CSV'\n"
-                f"2. Укажите кодировку UTF-8 и разделитель ';'"
-            )
-        )
-
-    except Exception as e:
-        await message.answer(f"❌ Ошибка экспорта: {str(e)}")
-        logger.exception("Export error:")
-    finally:
-        if temp_file and os.path.exists(temp_file):
-            os.remove(temp_file)
 # ======================
 # ОСНОВНЫЕ ФУНКЦИИ
 # ======================
@@ -253,7 +192,6 @@ async def start_handler(message: types.Message):
 
     text = "Привет! Я бот для помощи с гайдами. Доступные команды:"
 
-    # Разный текст для админа
     if message.from_user.id == ADMIN_ID:
         text += "\n\n⚙️ Доступно админ-меню"
 
@@ -321,6 +259,119 @@ async def version_handler(message: types.Message):
     await message.answer(f"🔧 Текущая версия: {BOT_VERSION}")
 
 
+@dp.message(F.text == '📁 Выгрузить БД (CSV)')
+async def export_db_csv_handler(message: types.Message):
+    """Экспорт БД в CSV (версия 1.3)"""
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    temp_file = None
+    try:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"bot_users_export_{timestamp}.csv"
+        temp_file = os.path.join(FILES_DIR, filename)
+
+        async with aiosqlite.connect(DB_NAME) as db:
+            cursor = await db.execute("SELECT * FROM users")
+            users = await cursor.fetchall()
+
+            if not users:
+                await message.answer("🔄 База данных пуста")
+                return
+
+            with open(temp_file, 'w', encoding='utf-8-sig', newline='') as f:
+                writer = csv.writer(f, delimiter=';', quoting=csv.QUOTE_ALL)
+                writer.writerow(['ID', 'Username', 'Имя', 'Фамилия',
+                                'Дата регистрации', 'Последняя активность'])
+                for user in users:
+                    writer.writerow([
+                        user[0],
+                        f'"{user[1]}"' if user[1] else '',
+                        f'"{user[2]}"' if user[2] else '',
+                        f'"{user[3]}"' if user[3] else '',
+                        user[4],
+                        user[5]
+                    ])
+
+        file_size = os.path.getsize(temp_file) / (1024 * 1024)
+        if file_size > 45:
+            await message.answer("⚠️ Файл слишком большой для отправки (>45 МБ)")
+            return
+
+        document = FSInputFile(temp_file, filename=filename)
+        await message.answer_document(
+            document,
+            caption=(
+                f"📊 Экспорт БД ({len(users)} записей, v{BOT_VERSION})\n"
+                f"ℹ️ Для открытия в Excel:\n"
+                f"1. 'Данные' → 'Из текста/CSV'\n"
+                f"2. Кодировка: 65001 UTF-8\n"
+                f"3. Разделитель: точка с запятой"
+            )
+        )
+
+    except Exception as e:
+        await message.answer(f"❌ Ошибка экспорта: {str(e)}")
+    finally:
+        if temp_file and os.path.exists(temp_file):
+            os.remove(temp_file)
+
+
+@dp.message(F.text == '✉️ Сообщение пользователям')
+async def broadcast_handler(message: types.Message, state: FSMContext):
+    """Обработчик рассылки сообщений"""
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    await message.answer(
+        "Введите сообщение для рассылки всем пользователям:",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    await state.set_state(BroadcastState.waiting_message)
+
+
+@dp.message(BroadcastState.waiting_message)
+async def process_broadcast_message(message: types.Message, state: FSMContext):
+    """Обработка введённого сообщения для рассылки"""
+    await state.clear()
+
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    sender_id = message.from_user.id
+    await message.answer("⏳ Начинаю рассылку...", reply_markup=get_admin_keyboard())
+
+    try:
+        async with aiosqlite.connect(DB_NAME) as db:
+            cursor = await db.execute("SELECT user_id FROM users WHERE user_id != ?", (sender_id,))
+            users = await cursor.fetchall()
+
+        results = {"success": 0, "failed": 0}
+
+        for user in users:
+            try:
+                await bot.send_message(user[0], message.text)
+                results["success"] += 1
+                await asyncio.sleep(0.1)
+            except Exception as e:
+                logger.error(f"Ошибка отправки пользователю {user[0]}: {e}")
+                results["failed"] += 1
+
+        await message.answer(
+            f"✅ Рассылка завершена:\n"
+            f"• Получателей: {len(users)}\n"
+            f"• Доставлено: {results['success']}\n"
+            f"• Ошибок: {results['failed']}",
+            reply_markup=get_admin_keyboard()
+        )
+    except Exception as e:
+        logger.error(f"Ошибка при рассылке: {e}")
+        await message.answer(
+            f"❌ Ошибка при рассылке: {str(e)}",
+            reply_markup=get_admin_keyboard()
+        )
+
+
 @dp.message(F.text == '!БД')
 async def send_db_guide(message: types.Message):
     """Отправка гайда по базам данных"""
@@ -358,68 +409,6 @@ async def send_tips(message: types.Message):
         return
 
     await message.answer("Здесь будут полезные фишки...")
-
-
-# ======================
-# ОБРАБОТЧИК РАССЫЛКИ
-# ======================
-
-
-@dp.message(F.text == '✉️ Сообщение пользователям')
-async def broadcast_handler(message: types.Message, state: FSMContext):
-    if message.from_user.id != ADMIN_ID:
-        return
-
-    await message.answer(
-        "Введите сообщение для рассылки всем пользователям:",
-        reply_markup=ReplyKeyboardRemove()
-    )
-    await state.set_state(BroadcastState.waiting_message)
-
-
-@dp.message(BroadcastState.waiting_message)
-async def process_broadcast_message(message: types.Message, state: FSMContext):
-    """Обработка рассылки сообщения всем пользователям, кроме отправителя"""
-    await state.clear()
-
-    if message.from_user.id != ADMIN_ID:
-        return
-
-    sender_id = message.from_user.id
-    await message.answer("⏳ Начинаю рассылку...", reply_markup=get_admin_keyboard())
-
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            cursor = await db.execute("SELECT user_id FROM users WHERE user_id != ?", (sender_id,))
-            users = await cursor.fetchall()
-
-        results = {"success": 0, "failed": 0}
-
-        for user in users:
-            try:
-                await bot.send_message(user[0], message.text)
-                results["success"] += 1
-                await asyncio.sleep(0.1)
-            except Exception as e:
-                logger.error(f"Ошибка отправки пользователю {user[0]}: {e}")
-                results["failed"] += 1
-
-        report = (
-            f"📊 Отчет о рассылке:\n"
-            f"• Получателей: {len(users)}\n"
-            f"• Доставлено: {results['success']}\n"
-            f"• Ошибок: {results['failed']}"
-        )
-
-        await message.answer(report, reply_markup=get_admin_keyboard())
-
-    except Exception as e:
-        logger.error(f"Ошибка рассылки: {e}")
-        await message.answer(
-            f"❌ Ошибка рассылки: {str(e)}",
-            reply_markup=get_admin_keyboard()
-        )
-
 
 # ======================
 # ЗАПУСК БОТА
