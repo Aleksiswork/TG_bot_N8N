@@ -1,4 +1,4 @@
-from aiogram import Router, F, Bot
+from aiogram import Router, F, Bot, types
 from aiogram.types import Message, FSInputFile
 from aiogram.fsm.context import FSMContext
 from database import Database
@@ -12,6 +12,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import ReplyKeyboardRemove
 import os
 import logging
+from database.submissions import SubmissionDB
 
 
 class IdeaStates(StatesGroup):
@@ -22,6 +23,11 @@ class BroadcastState(StatesGroup):
     waiting_message = State()
 
 
+class SubmissionStates(StatesGroup):
+    waiting_for_submission = State()
+
+
+# submission_db = SubmissionDB()
 router = Router()
 db = Database()
 logger = logging.getLogger(__name__)
@@ -31,14 +37,24 @@ logger = logging.getLogger(__name__)
 # -------------------------------
 
 
-@router.message(F.text == "📨 Предложить идею")
-async def start_idea_suggestion(message: Message, state: FSMContext):
-    """Начало процесса предложения идеи"""
+# @router.message(F.text == "📨 Предложить идею")
+# async def start_idea_suggestion(message: Message, state: FSMContext):
+#     """Начало процесса предложения идеи"""
+#     await message.answer(
+#         "Напишите вашу идею или предложение одним сообщением:",
+#         reply_markup=ReplyKeyboardRemove()
+#     )
+#     await state.set_state(IdeaStates.waiting_for_idea)
+
+
+@router.message(F.text == "📨 Предложить пост")
+async def start_submission(message: types.Message, state: FSMContext):
     await message.answer(
-        "Напишите вашу идею или предложение одним сообщением:",
+        "Отправьте ваш пост (текст + до 5 скриншотов):",
         reply_markup=ReplyKeyboardRemove()
     )
-    await state.set_state(IdeaStates.waiting_for_idea)
+    await state.set_state(SubmissionStates.waiting_for_submission)
+    await state.update_data(accumulated_files=[])
 
 
 @router.message(F.text == '✉️ Сообщение пользователям')
@@ -54,32 +70,61 @@ async def broadcast_handler(message: Message, state: FSMContext):
     await state.set_state(BroadcastState.waiting_message)
 
 
-@router.message(IdeaStates.waiting_for_idea)
-async def process_idea(message: Message, state: FSMContext, bot: Bot):
-    """Обработка идеи без сохранения в БД"""
-    try:
-        # Просто выводим в логи
-        logger.info(f"Идея от @{message.from_user.username}: {message.text}")
+# @router.message(IdeaStates.waiting_for_idea)
+# async def process_idea(message: Message, state: FSMContext, bot: Bot):
+#     """Обработка идеи без сохранения в БД"""
+#     try:
+#         # Просто выводим в логи
+#         logger.info(f"Идея от @{message.from_user.username}: {message.text}")
+
+#         await message.answer(
+#             "✅ Спасибо за ваше предложение!",
+#             reply_markup=get_main_keyboard(message.from_user.id)
+#         )
+
+#         # Можно добавить уведомление админу (опционально)
+#         await bot.send_message(
+#             ADMIN_IDS,
+#             f"Новая идея от @{message.from_user.username}"
+#         )
+
+#     except Exception as e:
+#         logger.error(f"Ошибка обработки идеи: {e}")
+#         await message.answer(
+#             "❌ Произошла ошибка",
+#             reply_markup=get_main_keyboard(message.from_user.id)
+#         )
+#     finally:
+#         await state.clear()
+
+@router.message(SubmissionStates.waiting_for_submission, F.photo | F.document | F.text)
+async def handle_submission_content(message: types.Message, state: FSMContext, bot: Bot, submission_db: SubmissionDB):
+    user_data = await state.get_data()
+    accumulated_files = user_data.get('accumulated_files', [])
+
+    # Обработка медиа
+    if message.photo:
+        accumulated_files.append(message.photo[-1].file_id)
+    elif message.document:
+        accumulated_files.append(message.document.file_id)
+
+    # Если текст или лимит файлов
+    if message.text or len(accumulated_files) >= 5:
+        await submission_db.add_submission(
+            user_id=message.from_user.id,
+            username=message.from_user.username,
+            text=message.text or "",
+            file_ids=accumulated_files[:5]  # Ограничиваем 5 файлами
+        )
 
         await message.answer(
-            "✅ Спасибо за ваше предложение!",
+            "✅ Пост отправлен на модерацию!",
             reply_markup=get_main_keyboard(message.from_user.id)
         )
-
-        # Можно добавить уведомление админу (опционально)
-        await bot.send_message(
-            ADMIN_IDS,
-            f"Новая идея от @{message.from_user.username}"
-        )
-
-    except Exception as e:
-        logger.error(f"Ошибка обработки идеи: {e}")
-        await message.answer(
-            "❌ Произошла ошибка",
-            reply_markup=get_main_keyboard(message.from_user.id)
-        )
-    finally:
         await state.clear()
+    else:
+        await state.update_data(accumulated_files=accumulated_files)
+        await message.answer("Принято! Можете добавить ещё файлы или отправьте текст.")
 
 
 @router.message(F.text == 'Установка БД')

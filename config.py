@@ -8,9 +8,13 @@ Telegram Bot v1.8
 import os
 from dotenv import load_dotenv
 from typing import List
-
+from pathlib import Path
 # Загрузка .env файла
 load_dotenv()
+
+# BASE_DIR = Path(__file__).parent.parent
+# DB_SUBMISSIONS_PATH = os.path.join(BASE_DIR, 'data', 'submissions.db')
+# print("Путь к submissions.db:", DB_SUBMISSIONS_PATH)
 
 
 def parse_admin_ids(env_str: str) -> List[int]:
@@ -37,7 +41,7 @@ ADMIN_IDS = parse_admin_ids(os.getenv("ADMIN_IDS", ""))
 CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")
 CHANNEL_LINK = os.getenv("CHANNEL_LINK")
 FILES_DIR = os.getenv("FILES_DIR", "files").replace("\\", "/")
-BOT_VERSION = "1.4"
+BOT_VERSION = "1.8"
 DB_NAME = "bot_users.db"
 
 # Валидация конфигурации

@@ -9,6 +9,12 @@ import os
 from handlers.common import router as common_router
 from handlers.user import router as user_router
 from handlers.admin import router as admin_router
+from database.submissions import SubmissionDB
+from config import DB_SUBMISSIONS_PATH
+
+
+from database.submissions import SubmissionDB
+import asyncio
 
 
 # Инициализация базы данных
@@ -33,8 +39,8 @@ class BroadcastState(StatesGroup):
 
 
 # Инициализация бота
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
+# bot = Bot(token=BOT_TOKEN)
+# dp = Dispatcher()
 
 
 # ======================
@@ -43,18 +49,48 @@ dp = Dispatcher()
 
 
 async def main():
-    """Основная функция запуска"""
-    await db.init_db()
+    # Инициализация БД ДО запуска бота
+    print("Путь к submissions.db:", DB_SUBMISSIONS_PATH)
+    submission_db = SubmissionDB()
+    await submission_db.init()  # Явная инициализация
+
+    bot = Bot(token=BOT_TOKEN)
+    dp = Dispatcher()
+
+    # Подключаем роутеры ПЕРЕД стартом бота
     dp.include_router(common_router)
     dp.include_router(user_router)
     dp.include_router(admin_router)
+
     logger.info(f"🚀 Бот v{BOT_VERSION} запущен")
     try:
-        await dp.start_polling(bot)
-
+        await dp.start_polling(bot)  # Теперь бот видит все обработчики
     finally:
-        await bot.session.close()
-        logger.info("Бот остановлен")
+        await submission_db.close()  # Закрываем соединение при завершении
+
+# async def main():
+#     """Основная функция запуска"""
+#     async with SubmissionDB() as db:
+#         await db.init()
+#         logger.info(f"🚀 Бот v{BOT_VERSION} запущен")
+#         bot = Bot(token=BOT_TOKEN)
+#         dp = Dispatcher()
+
+#         try:
+#             await dp.start_polling(bot)
+#             dp.include_router(common_router)
+#             dp.include_router(user_router)
+#             dp.include_router(admin_router)
+#         finally:
+#             await db.close()  # Закрытие при завершении
+
+#     # logger.info(f"🚀 Бот v{BOT_VERSION} запущен")
+#     # try:
+#     #     await dp.start_polling(bot)
+
+#     # finally:
+#     #     await bot.session.close()
+#     #     logger.info("Бот остановлен")
 
 
 if __name__ == "__main__":
