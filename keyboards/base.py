@@ -1,3 +1,5 @@
+from config import ADMIN_ID
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.types import (
     InlineKeyboardMarkup,
     InlineKeyboardButton,
@@ -17,17 +19,32 @@ def get_subscribe_keyboard():
 
 
 def get_main_keyboard(user_id: int):
-    """Главное меню (разное для админа и пользователей)"""
-    buttons = [
-        [
-            KeyboardButton(text="Установка БД"),
-            KeyboardButton(text="Фишки"),
-            KeyboardButton(text="Установка N8N"),
-            KeyboardButton(text="Фаервол и ssh-keygen")
-        ]
+    """Создает главную клавиатуру с корректной структурой"""
+    keyboard = [
+        [KeyboardButton(text="Установка БД"), KeyboardButton(text="Фишки")],
+        [KeyboardButton(text="Установка N8N"), KeyboardButton(
+            text="Фаервол и ssh-keygen")],
+        [KeyboardButton(text="📨 Предложить идею")]
     ]
 
     if user_id == ADMIN_ID:
-        buttons.append([KeyboardButton(text="⚙️ Управление")])
+        keyboard.append([KeyboardButton(text="⚙️ Управление")])
 
-    return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+
+# def get_main_keyboard(user_id: int):
+#     """Главное меню (разное для админа и пользователей)"""
+#     buttons = [
+#         [
+#             KeyboardButton(text="Установка БД"),
+#             KeyboardButton(text="Фишки"),
+#             KeyboardButton(text="Установка N8N"),
+#             KeyboardButton(text="Фаервол и ssh-keygen"),
+#             [KeyboardButton(text="📨 Предложить пост")]
+#         ]
+#     ]
+
+#     if user_id == ADMIN_ID:
+#         buttons.append([KeyboardButton(text="⚙️ Управление")])
+
+#     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)

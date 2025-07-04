@@ -7,9 +7,20 @@ from keyboards import (
     get_main_keyboard
 )
 from utils import check_subscription
-from config import FILES_DIR
+from config import FILES_DIR, ADMIN_ID
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import ReplyKeyboardRemove
 import os
 import logging
+
+
+class IdeaStates(StatesGroup):
+    waiting_for_idea = State()
+
+
+class BroadcastState(StatesGroup):
+    waiting_message = State()
+
 
 router = Router()
 db = Database()
@@ -18,6 +29,57 @@ logger = logging.getLogger(__name__)
 # -------------------------------
 # Обработчики материалов
 # -------------------------------
+
+
+@router.message(F.text == "📨 Предложить идею")
+async def start_idea_suggestion(message: Message, state: FSMContext):
+    """Начало процесса предложения идеи"""
+    await message.answer(
+        "Напишите вашу идею или предложение одним сообщением:",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    await state.set_state(IdeaStates.waiting_for_idea)
+
+
+@router.message(F.text == '✉️ Сообщение пользователям')
+async def broadcast_handler(message: Message, state: FSMContext):
+    """Запуск процесса рассылки"""
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    await message.answer(
+        "Введите сообщение для рассылки:",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    await state.set_state(BroadcastState.waiting_message)
+
+
+@router.message(IdeaStates.waiting_for_idea)
+async def process_idea(message: Message, state: FSMContext, bot: Bot):
+    """Обработка идеи без сохранения в БД"""
+    try:
+        # Просто выводим в логи
+        logger.info(f"Идея от @{message.from_user.username}: {message.text}")
+
+        await message.answer(
+            "✅ Спасибо за ваше предложение!",
+            reply_markup=get_main_keyboard(message.from_user.id)
+        )
+
+        # Можно добавить уведомление админу (опционально)
+        await bot.send_message(
+            ADMIN_ID,
+            f"Новая идея от @{message.from_user.username}"
+        )
+
+    except Exception as e:
+        logger.error(f"Ошибка обработки идеи: {e}")
+        await message.answer(
+            "❌ Произошла ошибка",
+            reply_markup=get_main_keyboard(message.from_user.id)
+        )
+    finally:
+        await state.clear()
 
 
 @router.message(F.text == 'Установка БД')
