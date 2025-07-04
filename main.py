@@ -7,7 +7,8 @@ from aiogram.types import (
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from config import BOT_TOKEN, ADMIN_ID, BOT_VERSION, FILES_DIR, CHANNEL_USERNAME
-from database.db import Database
+# from database.db import Database
+from database import Database
 from keyboards import get_subscribe_keyboard, get_main_keyboard, get_admin_keyboard
 from utils import check_subscription
 import asyncio
