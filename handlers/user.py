@@ -7,7 +7,7 @@ from keyboards import (
     get_main_keyboard
 )
 from utils import check_subscription
-from config import FILES_DIR, ADMIN_ID
+from config import FILES_DIR, ADMIN_IDS
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import ReplyKeyboardRemove
 import os
@@ -44,7 +44,7 @@ async def start_idea_suggestion(message: Message, state: FSMContext):
 @router.message(F.text == '✉️ Сообщение пользователям')
 async def broadcast_handler(message: Message, state: FSMContext):
     """Запуск процесса рассылки"""
-    if message.from_user.id != ADMIN_ID:
+    if message.from_user.id not in ADMIN_IDS:
         return
 
     await message.answer(
@@ -68,7 +68,7 @@ async def process_idea(message: Message, state: FSMContext, bot: Bot):
 
         # Можно добавить уведомление админу (опционально)
         await bot.send_message(
-            ADMIN_ID,
+            ADMIN_IDS,
             f"Новая идея от @{message.from_user.username}"
         )
 

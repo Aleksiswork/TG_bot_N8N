@@ -1,4 +1,5 @@
-from config import ADMIN_ID
+# from config import ADMIN_ID
+from config import ADMIN_IDS
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.types import (
     InlineKeyboardMarkup,
@@ -6,7 +7,7 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
     KeyboardButton
 )
-from config import CHANNEL_LINK, ADMIN_ID
+from config import CHANNEL_LINK, ADMIN_IDS
 
 
 def get_subscribe_keyboard():
@@ -27,7 +28,7 @@ def get_main_keyboard(user_id: int):
         [KeyboardButton(text="📨 Предложить идею")]
     ]
 
-    if user_id == ADMIN_ID:
+    if user_id in ADMIN_IDS:
         keyboard.append([KeyboardButton(text="⚙️ Управление")])
 
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)

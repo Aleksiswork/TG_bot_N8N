@@ -4,7 +4,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from database import Database
 from keyboards import get_admin_keyboard
-from config import FILES_DIR, BOT_VERSION, ADMIN_ID
+from config import FILES_DIR, BOT_VERSION, ADMIN_IDS  # ADMIN_ID
 from datetime import datetime
 import time
 import re
@@ -31,7 +31,7 @@ class BroadcastState(StatesGroup):
 @router.message(F.text == '⚙️ Управление')
 async def admin_panel(message: Message):
     """Отображение админ-панели"""
-    if message.from_user.id != ADMIN_ID:
+    if message.from_user.id not in ADMIN_IDS:
         return
     await message.answer("Админ-панель:", reply_markup=get_admin_keyboard())
 
@@ -39,7 +39,7 @@ async def admin_panel(message: Message):
 @router.message(F.text == '📊 Статистика')
 async def stats_handler(message: Message):
     """Показ статистики бота"""
-    if message.from_user.id != ADMIN_ID:
+    if message.from_user.id not in ADMIN_IDS:
         return
 
     total_users, recent_users = await db.get_users_stats()
@@ -57,7 +57,7 @@ async def stats_handler(message: Message):
 @router.message(F.text == '🔄 Версия бота')
 async def version_handler(message: Message):
     """Показ версии бота"""
-    if message.from_user.id != ADMIN_ID:
+    if message.from_user.id not in ADMIN_IDS:
         return
     await message.answer(f"🔧 Текущая версия: {BOT_VERSION}")
 
@@ -65,7 +65,7 @@ async def version_handler(message: Message):
 # @router.message(F.text == '📁 Выгрузить БД (CSV)')
 # async def export_db_csv_handler(message: Message):
 #     """Экспорт базы данных в CSV"""
-#     if message.from_user.id != ADMIN_ID:
+#     if message.from_user.id != ADMIN_IDS:
 #         return
 
 #     temp_file = None
@@ -113,7 +113,7 @@ async def version_handler(message: Message):
 
 # @router.message(F.text == '📁 Выгрузить БД (CSV)')
 # async def export_db_csv_handler(message: Message):
-#     if message.from_user.id != ADMIN_ID:
+#     if message.from_user.id != ADMIN_IDS:
 #         return
 
 #     # Удаляем старые файлы
@@ -153,7 +153,7 @@ async def version_handler(message: Message):
 # @router.message(F.text == '📁 Выгрузить БД (CSV)')
 # async def export_db_csv_handler(message: Message):
 #     """Экспорт базы данных в CSV с очисткой старых файлов"""
-#     if message.from_user.id != ADMIN_ID:
+#     if message.from_user.id != ADMIN_IDS:
 #         return
 
 #     # Удаляем старые файлы (>1 часа)
@@ -218,7 +218,7 @@ async def version_handler(message: Message):
 @router.message(F.text == '📁 Выгрузить БД (CSV)')
 async def export_db_csv_handler(message: Message):
     """Экспорт пользователей с контролем размера файла"""
-    if message.from_user.id != ADMIN_ID:
+    if message.from_user.id not in ADMIN_IDS:
         return
 
     try:
@@ -300,7 +300,7 @@ async def export_db_csv_handler(message: Message):
 @router.message(F.text == '✉️ Сообщение пользователям')
 async def broadcast_handler(message: Message, state: FSMContext):
     """Запуск процесса рассылки"""
-    if message.from_user.id != ADMIN_ID:
+    if message.from_user.id not in ADMIN_IDS:
         return
 
     await message.answer(
@@ -345,7 +345,7 @@ async def process_broadcast(message: Message, state: FSMContext, bot: Bot):
     """Обработка рассылки с исключением отправителя"""
     await state.clear()
 
-    if message.from_user.id != ADMIN_ID:
+    if message.from_user.id not in ADMIN_IDS:
         return
 
     users = await db.get_all_users()
@@ -382,6 +382,6 @@ async def process_broadcast(message: Message, state: FSMContext, bot: Bot):
 @router.message(F.text == '⬅️ Назад')
 async def back_to_admin_menu(message: Message):
     """Возврат в админ-меню"""
-    if message.from_user.id != ADMIN_ID:
+    if message.from_user.id not in ADMIN_IDS:
         return
     await message.answer("Админ-панель:", reply_markup=get_admin_keyboard())
