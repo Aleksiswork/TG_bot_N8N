@@ -1,19 +1,7 @@
-"""
-Telegram Bot v1.4
-Обновления:
-- Разнесение кода по модулям
-- Конфигурация вынесена в config.py
-- Работа с БД вынесена в database/db.py
-"""
-
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import (
     FSInputFile,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton,
-    ReplyKeyboardMarkup,
-    KeyboardButton,
     ReplyKeyboardRemove
 )
 from aiogram.enums import ChatMemberStatus
@@ -21,6 +9,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from config import BOT_TOKEN, ADMIN_ID, BOT_VERSION, FILES_DIR, CHANNEL_USERNAME, CHANNEL_LINK
 from database.db import Database
+from keyboards import get_subscribe_keyboard, get_main_keyboard, get_admin_keyboard
 import asyncio
 import logging
 import os
@@ -50,49 +39,6 @@ class BroadcastState(StatesGroup):
 # Инициализация бота
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
-
-# ======================
-# КЛАВИАТУРЫ
-# ======================
-
-
-def get_subscribe_keyboard():
-    """Клавиатура для подписки на канал"""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="📢 Подписаться", url=CHANNEL_LINK)]
-        ]
-    )
-
-
-def get_main_keyboard(user_id: int):
-    """Главное меню (разное для админа и пользователей)"""
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="Установка БД"), KeyboardButton(
-                text="Фишки"), KeyboardButton(text="Установка N8N"), KeyboardButton(text="Фаервол и ssh-keygen"), ],
-        ],
-        resize_keyboard=True
-    )
-
-    if user_id == ADMIN_ID:
-        keyboard.keyboard.append([KeyboardButton(text="⚙️ Управление")])
-
-    return keyboard
-
-
-def get_admin_keyboard():
-    """Админ-панель"""
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="📊 Статистика"),
-             KeyboardButton(text="🔄 Версия бота")],
-            [KeyboardButton(text="📁 Выгрузить БД (CSV)")],
-            [KeyboardButton(text="✉️ Сообщение пользователям")],
-            [KeyboardButton(text="⬅️ Назад")]
-        ],
-        resize_keyboard=True
-    )
 
 # ======================
 # ОСНОВНЫЕ ФУНКЦИИ
