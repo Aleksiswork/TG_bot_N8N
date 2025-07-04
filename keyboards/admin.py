@@ -9,8 +9,10 @@ def get_admin_keyboard():
                 KeyboardButton(text="📊 Статистика"),
                 KeyboardButton(text="🔄 Версия бота")
             ],
-            [KeyboardButton(text="📁 Выгрузить БД (CSV)")],
-            [KeyboardButton(text="✉️ Сообщение пользователям")],
+            [
+                KeyboardButton(text="📁 Выгрузить БД (CSV)"),
+                KeyboardButton(text="✉️ Сообщение пользователям")],
+
             [KeyboardButton(text="⬅️ Назад")]
         ],
         resize_keyboard=True
