@@ -6,7 +6,7 @@ Telegram Bot v1.8
 -Добавлена возможность сохранения нескольких ID для админов
 """
 import os
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 from typing import List
 from pathlib import Path
 # from config import FILES_DIR, ADMIN_IDS
@@ -14,7 +14,11 @@ from pathlib import Path
 # Версия бота задаётся статически, не из .env
 BOT_VERSION = "1.9"
 
-load_dotenv()
+# Найти и залогировать путь к .env
+env_path = find_dotenv()
+print(
+    f"🔧 Используется .env: {env_path if env_path else 'Файл .env не найден!'}")
+load_dotenv(env_path)
 
 # Логируем путь к .env и все переменные окружения
 ENV_PATH = Path(__file__).parent / '.env'
