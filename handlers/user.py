@@ -572,5 +572,6 @@ async def back_to_user_history(callback: types.CallbackQuery, state: FSMContext,
         buttons.append([InlineKeyboardButton(
             text=btn_text, callback_data=f"mymsg_{sub_id}")])
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-    await callback.message.answer("Ваша история обращений:", reply_markup=keyboard)
+    if callback.message:
+        await callback.message.answer("Ваша история обращений:", reply_markup=keyboard)
     await callback.answer()
