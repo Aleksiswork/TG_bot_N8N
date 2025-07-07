@@ -14,6 +14,7 @@ from aiogram.types import ReplyKeyboardRemove
 from database.submissions import SubmissionDB
 import json
 from typing import Union, Optional, Any
+import platform
 
 router = Router()
 db = Database()
@@ -52,8 +53,10 @@ async def stats_handler(message: Message):
         return
 
     total_users, recent_users = await db.get_users_stats()
+    hostname = platform.node()
 
     stats_text = f"📊 Статистика (v{BOT_VERSION}):\n"
+    stats_text += f"🖥️ Сервер: {hostname}\n"
     stats_text += f"👥 Пользователей: {total_users}\n\n"
     stats_text += "⚡ Последние активные:\n"
 
