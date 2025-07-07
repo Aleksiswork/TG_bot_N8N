@@ -6,6 +6,8 @@ from config import DB_NAME
 
 class Database:
     def __init__(self):
+        if not DB_NAME:
+            raise ValueError('❌ Отсутствует DB_USERS_PATH в .env')
         self.db_name = DB_NAME
         db_dir = os.path.dirname(self.db_name)
         print(f"[DB] Путь к базе: {self.db_name}")

@@ -55,7 +55,9 @@ ADMIN_IDS = parse_admin_ids(os.getenv("ADMIN_IDS", ""))
 CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")
 CHANNEL_LINK = os.getenv("CHANNEL_LINK")
 FILES_DIR = os.getenv("FILES_DIR", "files").replace("\\", "/")
-DB_NAME = r"d:/vps/Cursor/TG_bot_N8N/data/bot_users.db"
+DB_NAME = os.getenv('DB_USERS_PATH')
+if not DB_NAME:
+    raise ValueError('❌ Отсутствует DB_USERS_PATH в .env')
 
 # Валидация конфигурации
 if not BOT_TOKEN:

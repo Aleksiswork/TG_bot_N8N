@@ -26,8 +26,12 @@ class BroadcastState(StatesGroup):
 # Создаем глобальный экземпляр базы данных
 submission_db = SubmissionDB()
 router = Router()
-db = Database()
 logger = logging.getLogger(__name__)
+try:
+    db = Database()
+except Exception as e:
+    db = None
+    logger.error(f"Ошибка инициализации Database: {e}")
 
 # -------------------------------
 # Обработчики материалов
@@ -325,26 +329,30 @@ async def handle_broadcast_content(message: types.Message, state: FSMContext, bo
             )
             return
         # Получаем всех пользователей
-        users = await db.get_all_users()
-        success = 0
-        failed = 0
-        for user in users:
-            try:
-                # Сначала отправляем файлы, если есть
-                for file_id in accumulated_files[:5]:
-                    await bot.send_photo(user[0], file_id)
-                # Затем текст, если есть
-                if accumulated_text:
-                    await bot.send_message(user[0], accumulated_text)
-                success += 1
-            except Exception:
-                failed += 1
-        await message.answer(
-            f"✅ Рассылка завершена.\nДоставлено: {success}\nНе доставлено: {failed}",
-            reply_markup=get_main_keyboard(user_id)
-        )
-        await state.clear()
-        return
+        if db is not None:
+            users = await db.get_all_users()
+            success = 0
+            failed = 0
+            for user in users:
+                try:
+                    # Сначала отправляем файлы, если есть
+                    for file_id in accumulated_files[:5]:
+                        await bot.send_photo(user[0], file_id)
+                    # Затем текст, если есть
+                    if accumulated_text:
+                        await bot.send_message(user[0], accumulated_text)
+                    success += 1
+                except Exception:
+                    failed += 1
+            await message.answer(
+                f"✅ Рассылка завершена.\nДоставлено: {success}\nНе доставлено: {failed}",
+                reply_markup=get_main_keyboard(user_id)
+            )
+            await state.clear()
+            return
+        else:
+            await message.answer("❌ Ошибка: не удалось получить пользователей из базы данных.")
+            return
 
     # Накопление фото
     if message.photo:
@@ -389,6 +397,9 @@ async def handle_broadcast_content(message: types.Message, state: FSMContext, bo
 @router.message(F.text == 'Установка БД')
 async def send_db_guide(message: Message, bot: Bot):
     """Отправка гайда по базам данных"""
+    if db is None:
+        await message.answer("❌ Ошибка: не удалось инициализировать подключение к базе данных. Обратитесь к администратору.")
+        return
     if not message.from_user:
         await message.answer("❌ Ошибка: не удалось определить пользователя")
         return
@@ -420,6 +431,9 @@ async def send_firewall_guide(message: Message, bot: Bot):
         await message.answer("❌ Ошибка: не удалось определить пользователя")
         return
 
+    if db is None:
+        await message.answer("❌ Ошибка: не удалось инициализировать подключение к базе данных. Обратитесь к администратору.")
+        return
     await db.save_user(message.from_user)
 
     if not await check_subscription(bot, message.from_user.id):
@@ -447,6 +461,9 @@ async def send_n8n_guide(message: Message, bot: Bot):
         await message.answer("❌ Ошибка: не удалось определить пользователя")
         return
 
+    if db is None:
+        await message.answer("❌ Ошибка: не удалось инициализировать подключение к базе данных. Обратитесь к администратору.")
+        return
     await db.save_user(message.from_user)
 
     file_path = os.path.join(FILES_DIR, 'install.pdf')
@@ -471,6 +488,9 @@ async def send_tips(message: Message, bot: Bot):
         await message.answer("❌ Ошибка: не удалось определить пользователя")
         return
 
+    if db is None:
+        await message.answer("❌ Ошибка: не удалось инициализировать подключение к базе данных. Обратитесь к администратору.")
+        return
     await db.save_user(message.from_user)
 
     if not await check_subscription(bot, message.from_user.id):
