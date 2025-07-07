@@ -2,9 +2,5 @@
 files/bonus.pdf
 files/install.pdf
 bot_users.db
-<<<<<<< HEAD
-__pycache__/
-=======
 **/__pycache__/
->>>>>>> c2c21954dfc304bf0e4efa66a0298ab6f4721d9c
 venv/
