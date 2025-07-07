@@ -9,12 +9,22 @@ import os
 from dotenv import load_dotenv
 from typing import List
 from pathlib import Path
+# from config import FILES_DIR, ADMIN_IDS
 # Загрузка .env файла
+# Версия бота задаётся статически, не из .env
+BOT_VERSION = "1.9"
+
 load_dotenv()
 
-# BASE_DIR = Path(__file__).parent.parent
-# DB_SUBMISSIONS_PATH = os.path.join(BASE_DIR, 'data', 'submissions.db')
-# print("Путь к submissions.db:", DB_SUBMISSIONS_PATH)
+# Логируем путь к .env и все переменные окружения
+ENV_PATH = Path(__file__).parent / '.env'
+
+
+BASE_DIR = Path(__file__).parent
+DB_SUBMISSIONS_PATH = os.getenv(
+    "DB_SUBMISSIONS_PATH", os.path.join(BASE_DIR, 'data', 'submissions.db'))
+print("🔧 Путь к submissions.db:", DB_SUBMISSIONS_PATH)
+print("🔧 ENV_PATH:", ENV_PATH)
 
 
 def parse_admin_ids(env_str: str) -> List[int]:
@@ -41,8 +51,7 @@ ADMIN_IDS = parse_admin_ids(os.getenv("ADMIN_IDS", ""))
 CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")
 CHANNEL_LINK = os.getenv("CHANNEL_LINK")
 FILES_DIR = os.getenv("FILES_DIR", "files").replace("\\", "/")
-BOT_VERSION = "1.8"
-DB_NAME = "bot_users.db"
+DB_NAME = r"d:/vps/Cursor/TG_bot_N8N/data/bot_users.db"
 
 # Валидация конфигурации
 if not BOT_TOKEN:
@@ -56,13 +65,3 @@ if not CHANNEL_USERNAME or not CHANNEL_LINK:
 
 # Создаем папку для файлов если не существует
 os.makedirs(FILES_DIR, exist_ok=True)
-
-# Пример использования (для тестирования)
-if __name__ == "__main__":
-    print("\n🔧 Конфигурация бота:")
-    print(f"BOT_TOKEN: {'установлен' if BOT_TOKEN else 'отсутствует'}")
-    print(f"ADMIN_IDS: {ADMIN_IDS}")
-    print(f"CHANNEL: @{CHANNEL_USERNAME}")
-    print(f"FILES_DIR: {FILES_DIR}")
-    print(f"DB_NAME: {DB_NAME}")
-    print(f"VERSION: {BOT_VERSION}\n")

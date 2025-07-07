@@ -22,9 +22,20 @@ class Database:
             ''')
             await db.commit()
 
+    @staticmethod
+    async def init_all():
+        """Асинхронно инициализирует все необходимые БД и таблицы проекта."""
+        db = Database()
+        await db.init_db()
+        from database.submissions import SubmissionDB
+        submission_db = SubmissionDB()
+        await submission_db.init()
+
     async def save_user(self, user):
         """Сохранение/обновление пользователя"""
         now = datetime.now().isoformat()
+        # Гарантируем, что таблица users существует перед операцией
+        await self.init_db()
         async with aiosqlite.connect(self.db_name) as db:
             cursor = await db.execute(
                 "SELECT 1 FROM users WHERE user_id = ?",
@@ -49,7 +60,8 @@ class Database:
         """Получение статистики пользователей"""
         async with aiosqlite.connect(self.db_name) as db:
             cursor = await db.execute("SELECT COUNT(*) FROM users")
-            total_users = (await cursor.fetchone())[0]
+            result = await cursor.fetchone()
+            total_users = result[0] if result is not None else 0
 
             cursor = await db.execute("""
                 SELECT first_name, username, last_active 

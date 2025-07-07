@@ -24,7 +24,7 @@ def get_main_keyboard(user_id: int):
         [KeyboardButton(text="Установка БД"), KeyboardButton(text="Фишки")],
         [KeyboardButton(text="Установка N8N"), KeyboardButton(
             text="Фаервол и ssh-keygen")],
-        [KeyboardButton(text="📨 Предложить идею")]
+        [KeyboardButton(text="📨 Обратная связь")]
     ]
 
     if user_id in ADMIN_IDS:
