@@ -46,7 +46,6 @@ class BroadcastState(StatesGroup):
 
 async def main():
     # Инициализация всех БД и таблиц ДО запуска бота
-    from database.db import Database
     await Database.init_all()
 
     # Явно создаём экземпляр SubmissionDB для последующего закрытия
