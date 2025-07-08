@@ -13,22 +13,20 @@ from database.submissions import SubmissionDB
 from config import DB_SUBMISSIONS_PATH
 
 
-# Инициализация базы данных
-db = Database()
+# Инициализация базы данных будет происходить асинхронно в main()
 
 # Создаем папку для файлов если не существует
 os.makedirs(FILES_DIR, exist_ok=True)
 
 # Настройка логирования
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format=f'%(asctime)s - %(name)s - v{BOT_VERSION} - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# Отключаем лишние INFO-логи от aiogram.event
+# Отключаем лишние логи
 logging.getLogger("aiogram.event").setLevel(logging.WARNING)
-# Отключаем INFO-логи от handlers.user
 logging.getLogger("handlers.user").setLevel(logging.WARNING)
 logging.getLogger("handlers.admin").setLevel(logging.WARNING)
 logging.getLogger("database.db").setLevel(logging.WARNING)
@@ -48,7 +46,7 @@ async def main():
     # Инициализация всех БД и таблиц ДО запуска бота
     await Database.init_all()
 
-    # Явно создаём экземпляр SubmissionDB для последующего закрытия
+    # Создаём экземпляр SubmissionDB для последующего закрытия
     from database.submissions import SubmissionDB
     submission_db = SubmissionDB()
 
