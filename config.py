@@ -1,5 +1,5 @@
 """
-Telegram Bot v1.8
+Telegram Bot v2.0
 Обновления:
 -Все распределнно по разным файлам
 -Добавлены кнопка и обработка получения сообщения от пользователя
@@ -12,7 +12,7 @@ from pathlib import Path
 # from config import FILES_DIR, ADMIN_IDS
 # Загрузка .env файла
 # Версия бота задаётся статически, не из .env
-BOT_VERSION = "1.9"
+BOT_VERSION = "2.0"
 
 # Найти и залогировать путь к .env
 env_path = find_dotenv()
