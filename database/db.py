@@ -1,3 +1,4 @@
+import os
 import aiosqlite
 from datetime import datetime
 from config import DB_NAME
@@ -5,7 +6,19 @@ from config import DB_NAME
 
 class Database:
     def __init__(self):
+        if not DB_NAME:
+            raise ValueError('❌ Отсутствует DB_USERS_PATH в .env')
         self.db_name = DB_NAME
+        db_dir = os.path.dirname(self.db_name)
+        print(f"[DB] Путь к базе: {self.db_name}")
+        if db_dir and not os.path.exists(db_dir):
+            print(f"[DB] Папка для базы не существует, создаю: {db_dir}")
+            os.makedirs(db_dir, exist_ok=True)
+        if not os.path.exists(self.db_name):
+            print(
+                f"[DB] Файл базы не найден, будет создан автоматически: {self.db_name}")
+        else:
+            print(f"[DB] Файл базы уже существует: {self.db_name}")
 
     async def init_db(self):
         """Инициализация базы данных"""

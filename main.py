@@ -26,6 +26,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Отключаем лишние INFO-логи от aiogram.event
+logging.getLogger("aiogram.event").setLevel(logging.WARNING)
+# Отключаем INFO-логи от handlers.user
+logging.getLogger("handlers.user").setLevel(logging.WARNING)
+logging.getLogger("handlers.admin").setLevel(logging.WARNING)
+logging.getLogger("database.db").setLevel(logging.WARNING)
+logging.getLogger("database.submissions").setLevel(logging.WARNING)
+
 
 class BroadcastState(StatesGroup):
     waiting_message = State()
@@ -38,7 +46,6 @@ class BroadcastState(StatesGroup):
 
 async def main():
     # Инициализация всех БД и таблиц ДО запуска бота
-    from database.db import Database
     await Database.init_all()
 
     # Явно создаём экземпляр SubmissionDB для последующего закрытия

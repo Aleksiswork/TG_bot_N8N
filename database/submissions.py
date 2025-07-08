@@ -7,6 +7,7 @@ from config import DB_SUBMISSIONS_PATH
 
 logger = logging.getLogger(__name__)
 
+
 class SubmissionDB:
     _instance = None  # Классовый атрибут для Singleton
 
@@ -28,24 +29,21 @@ class SubmissionDB:
         logger.info(f"📁 Папка для БД: {self.db_path.parent}")
 
     async def init(self):
-        """Инициализирует соединение с БД"""
-        logger.info(f"🔗 Попытка подключения к БД: {self.db_path}")
-        logger.info(f"📁 Файл БД существует: {self.db_path.exists()}")
-        
+        """
+        Инициализирует соединение с БД
+        """
         if self.connection is None:  # Если соединение ещё не создано
             logger.info(f"🔗 Создание нового соединения с БД: {self.db_path}")
             self.connection = await aiosqlite.connect(str(self.db_path))
             logger.info("✅ Соединение создано, создаем таблицы...")
             await self._create_tables()
             logger.info("✅ Соединение с БД установлено и таблицы созданы")
-        else:
-            logger.info("✅ Соединение с БД уже существует")
 
     async def _create_tables(self):
         """Создает таблицу submissions"""
         if self.connection is None:
             raise RuntimeError("Соединение с БД не инициализировано")
-        
+
         logger.info("🏗️ Создание таблицы submissions...")
         await self.connection.execute('''
             CREATE TABLE IF NOT EXISTS submissions (
@@ -69,18 +67,20 @@ class SubmissionDB:
         if self.connection is None:
             logger.error("❌ Соединение с БД не инициализировано!")
             raise RuntimeError("Соединение с БД не инициализировано")
-            
+
         logger.info(f"💾 Сохранение записи в БД:")
         logger.info(f"   👤 User ID: {user_id}")
         logger.info(f"   👤 Username: {username}")
-        logger.info(f"   📝 Text: '{text}' (тип: {type(text)}, длина: {len(text) if text else 0})")
+        logger.info(
+            f"   📝 Text: '{text}' (тип: {type(text)}, длина: {len(text) if text else 0})")
         logger.info(f"   📁 Files: {file_ids}")
         logger.info(f"   🔗 Connection status: {self.connection is not None}")
-        
+
         try:
             async with self.connection.cursor() as cursor:
                 logger.info("📝 Выполняем INSERT запрос...")
-                logger.info(f"📝 SQL параметры: user_id={user_id}, username='{username}', text='{text}', file_ids={json.dumps(file_ids)}")
+                logger.info(
+                    f"📝 SQL параметры: user_id={user_id}, username='{username}', text='{text}', file_ids={json.dumps(file_ids)}")
                 await cursor.execute(
                     '''INSERT INTO submissions 
                     (user_id, username, text_content, file_ids, status) 
@@ -100,7 +100,7 @@ class SubmissionDB:
         """Получает все записи из БД"""
         if self.connection is None:
             raise RuntimeError("Соединение с БД не инициализировано")
-            
+
         logger.info("📋 Получение всех записей из БД...")
         try:
             async with self.connection.cursor() as cursor:
@@ -117,7 +117,7 @@ class SubmissionDB:
         """Получает записи по статусу"""
         if self.connection is None:
             raise RuntimeError("Соединение с БД не инициализировано")
-            
+
         logger.info(f"📋 Получение записей со статусом '{status}'...")
         try:
             async with self.connection.cursor() as cursor:
@@ -127,7 +127,8 @@ class SubmissionDB:
                 )
                 rows = await cursor.fetchall()
                 rows_list = list(rows)
-                logger.info(f"📊 Найдено записей со статусом '{status}': {len(rows_list)}")
+                logger.info(
+                    f"📊 Найдено записей со статусом '{status}': {len(rows_list)}")
                 return rows_list
         except Exception as e:
             logger.error(f"❌ Ошибка при получении записей по статусу: {e}")
@@ -137,7 +138,7 @@ class SubmissionDB:
         """Получает запись по ID"""
         if self.connection is None:
             raise RuntimeError("Соединение с БД не инициализировано")
-            
+
         logger.info(f"📋 Получение записи с ID {submission_id}...")
         try:
             async with self.connection.cursor() as cursor:
@@ -151,7 +152,8 @@ class SubmissionDB:
                     logger.info(f"📊 Данные записи: {row}")
                     return row
                 else:
-                    logger.warning(f"⚠️ Запись с ID {submission_id} не найдена")
+                    logger.warning(
+                        f"⚠️ Запись с ID {submission_id} не найдена")
                     return None
         except Exception as e:
             logger.error(f"❌ Ошибка при получении записи по ID: {e}")
@@ -161,7 +163,7 @@ class SubmissionDB:
         """Отмечает запись как просмотренную"""
         if self.connection is None:
             raise RuntimeError("Соединение с БД не инициализировано")
-            
+
         logger.info(f"👁️ Отметка записи {submission_id} как просмотренной...")
         try:
             async with self.connection.cursor() as cursor:
@@ -172,7 +174,8 @@ class SubmissionDB:
                     (submission_id,)
                 )
                 await self.connection.commit()
-                logger.info(f"✅ Запись {submission_id} отмечена как просмотренная")
+                logger.info(
+                    f"✅ Запись {submission_id} отмечена как просмотренная")
         except Exception as e:
             logger.error(f"❌ Ошибка при отметке как просмотренной: {e}")
             raise
@@ -181,7 +184,7 @@ class SubmissionDB:
         """Отмечает запись как решенную"""
         if self.connection is None:
             raise RuntimeError("Соединение с БД не инициализировано")
-            
+
         logger.info(f"✅ Отметка записи {submission_id} как решенной...")
         try:
             async with self.connection.cursor() as cursor:
@@ -201,7 +204,7 @@ class SubmissionDB:
         """Удаляет запись"""
         if self.connection is None:
             raise RuntimeError("Соединение с БД не инициализировано")
-            
+
         logger.info(f"🗑️ Удаление записи {submission_id}...")
         try:
             async with self.connection.cursor() as cursor:
@@ -219,7 +222,7 @@ class SubmissionDB:
         """Получает статистику по записям"""
         if self.connection is None:
             raise RuntimeError("Соединение с БД не инициализировано")
-            
+
         logger.info("📊 Получение статистики...")
         try:
             async with self.connection.cursor() as cursor:
@@ -227,29 +230,29 @@ class SubmissionDB:
                 await cursor.execute('SELECT COUNT(*) FROM submissions')
                 total_row = await cursor.fetchone()
                 total = total_row[0] if total_row else 0
-                
+
                 # Новые
                 await cursor.execute("SELECT COUNT(*) FROM submissions WHERE status = 'new'")
                 new_row = await cursor.fetchone()
                 new_count = new_row[0] if new_row else 0
-                
+
                 # Решенные
                 await cursor.execute("SELECT COUNT(*) FROM submissions WHERE status = 'solved'")
                 solved_row = await cursor.fetchone()
                 solved_count = solved_row[0] if solved_row else 0
-                
+
                 # Просмотренные
                 await cursor.execute("SELECT COUNT(*) FROM submissions WHERE status = 'viewed'")
                 viewed_row = await cursor.fetchone()
                 viewed_count = viewed_row[0] if viewed_row else 0
-                
+
                 stats = {
                     'total': total,
                     'new': new_count,
                     'solved': solved_count,
                     'viewed': viewed_count
                 }
-                
+
                 logger.info(f"📊 Статистика: {stats}")
                 return stats
         except Exception as e:

@@ -14,11 +14,16 @@ from aiogram.types import ReplyKeyboardRemove
 from database.submissions import SubmissionDB
 import json
 from typing import Union, Optional, Any
+import platform
 
 router = Router()
-db = Database()
-submission_db = SubmissionDB()
 logger = logging.getLogger(__name__)
+try:
+    db = Database()
+except Exception as e:
+    db = None
+    logger.error(f"Ошибка инициализации Database: {e}")
+submission_db = SubmissionDB()
 
 
 class BroadcastState(StatesGroup):
@@ -51,13 +56,18 @@ async def stats_handler(message: Message):
     if not message.from_user or message.from_user.id not in ADMIN_IDS:
         return
 
-    total_users, recent_users = await db.get_users_stats()
+    if db is None:
+        await message.answer("❌ Ошибка: не удалось инициализировать подключение к базе данных. Обратитесь к администратору.")
+        return
+    stats = await db.get_users_stats()
+    hostname = platform.node()
 
     stats_text = f"📊 Статистика (v{BOT_VERSION}):\n"
-    stats_text += f"👥 Пользователей: {total_users}\n\n"
+    stats_text += f"🖥️ Сервер: {hostname}\n"
+    stats_text += f"👥 Пользователей: {stats[0]}\n\n"
     stats_text += "⚡ Последние активные:\n"
 
-    for user in recent_users:
+    for user in stats[1]:
         stats_text += f"- {user[0]} (@{user[1]}) - {user[2][:10]}\n"
 
     await message.answer(stats_text)
@@ -78,17 +88,20 @@ async def export_db_csv_handler(message: Message):
         return
 
     try:
-        all_users = await db.get_all_users()
-        total_users = len(list(all_users))
+        if db is None:
+            await message.answer("❌ Ошибка: не удалось получить пользователей из базы данных.")
+            return
+        users = await db.get_all_users()
+        total_users = len(list(users))
 
-        if not all_users:
+        if not users:
             await message.answer("🔄 База данных пуста")
             return
 
         MAX_FILE_SIZE_MB = 45  # Лимит Telegram
         BATCH_SIZE = 10000     # Записей на файл
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        batches = [list(all_users)[i:i + BATCH_SIZE]
+        batches = [list(users)[i:i + BATCH_SIZE]
                    for i in range(0, total_users, BATCH_SIZE)]
         sent_files = 0
 
@@ -830,6 +843,9 @@ async def process_broadcast(message: Message, state: FSMContext, bot: Bot):
     if not message.from_user or message.from_user.id not in ADMIN_IDS:
         return
 
+    if db is None:
+        await message.answer("❌ Ошибка: не удалось инициализировать подключение к базе данных. Обратитесь к администратору.")
+        return
     users = await db.get_all_users()
     success = 0
     failed = 0
