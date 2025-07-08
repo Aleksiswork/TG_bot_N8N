@@ -2,5 +2,6 @@
 files/bonus.pdf
 files/install.pdf
 bot_users.db
+submissions.db
 **/__pycache__/
 venv/

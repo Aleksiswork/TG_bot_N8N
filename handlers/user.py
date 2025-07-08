@@ -101,11 +101,8 @@ async def handle_feedback_content(message: types.Message, state: FSMContext, bot
             await state.clear()
             return
 
-        logger.info(f"🔄 Начало обработки сообщения от {message.from_user.id}")
-
         # Проверяем, не нажал ли пользователь кнопку "Отменить"
         if message.text == "❌ Отменить":
-            logger.info("❌ Пользователь отменил отправку")
             await message.answer(
                 "❌ Отправка отменена.",
                 reply_markup=get_main_keyboard(message.from_user.id)
@@ -115,14 +112,10 @@ async def handle_feedback_content(message: types.Message, state: FSMContext, bot
 
         # Проверяем, не нажал ли пользователь кнопку "Отправить"
         if message.text == "📤 Отправить":
-            logger.info("📤 Пользователь нажал 'Отправить'")
             user_data = await state.get_data()
             accumulated_text = user_data.get('accumulated_text', '') or ''
             accumulated_text = accumulated_text.strip()
             accumulated_files = user_data.get('accumulated_files', [])
-
-            logger.info(
-                f"📊 Данные для отправки: текст={len(accumulated_text)} символов, файлов={len(accumulated_files)}")
 
             if not accumulated_text and not accumulated_files:
                 logger.warning("⚠️ Пользователь не отправил контент")
@@ -140,20 +133,11 @@ async def handle_feedback_content(message: types.Message, state: FSMContext, bot
 
             # Инициализируем базу данных если нужно
             try:
-                logger.info("🔗 Инициализация БД...")
                 await submission_db.init()
-                logger.info("✅ База данных инициализирована")
             except Exception as e:
                 logger.error(f"❌ Ошибка инициализации БД: {e}")
                 await message.answer("❌ Ошибка подключения к базе данных. Попробуйте позже.")
                 return
-
-            logger.info("💾 Начинаем сохранение в базу данных...")
-            logger.info(f"👤 User ID: {message.from_user.id}")
-            logger.info(
-                f"👤 Username: {message.from_user.username or 'unknown'}")
-            logger.info(f"📝 Text: {accumulated_text}")
-            logger.info(f"📁 Files: {accumulated_files}")
 
             try:
                 await submission_db.add_submission(
@@ -163,7 +147,6 @@ async def handle_feedback_content(message: types.Message, state: FSMContext, bot
                     file_ids=accumulated_files[:5]  # Ограничиваем 5 файлами
                 )
 
-                logger.info("✅ Успешно сохранено в базу данных!")
                 user_id = message.from_user.id if message.from_user else 0
                 await message.answer(
                     "✅ Сообщение отправлено! Спасибо за обратную связь.",
@@ -172,7 +155,6 @@ async def handle_feedback_content(message: types.Message, state: FSMContext, bot
                 await state.clear()
             except Exception as e:
                 logger.error(f"❌ Ошибка сохранения в БД: {e}")
-                logger.error(f"❌ Детали ошибки: {type(e).__name__}: {str(e)}")
                 user_id = message.from_user.id if message.from_user else 0
                 await message.answer(
                     "❌ Ошибка при сохранении сообщения. Попробуйте позже.",
@@ -183,16 +165,6 @@ async def handle_feedback_content(message: types.Message, state: FSMContext, bot
 
         user_id = message.from_user.id if message.from_user else "unknown"
         username = message.from_user.username if message.from_user else "unknown"
-        logger.info(
-            f"📝 Получено сообщение от пользователя {user_id} (@{username})")
-        message_type = "текст"
-        if message.photo:
-            message_type = "фото"
-        elif message.document:
-            message_type = "документ"
-        if message.caption:
-            message_type += " с подписью"
-        logger.info(f"📄 Тип сообщения: {message_type}")
 
         user_data = await state.get_data()
         accumulated_files = user_data.get('accumulated_files', [])
