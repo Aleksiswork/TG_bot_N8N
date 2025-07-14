@@ -311,3 +311,13 @@
 2025-07-14 12:19:54,309 - __main__ - v3.0 - INFO - 💡 Для остановки нажмите Ctrl+C
 2025-07-14 12:19:54,309 - aiogram.dispatcher - v3.0 - INFO - Start polling
 2025-07-14 12:19:54,856 - aiogram.dispatcher - v3.0 - INFO - Run polling for bot @N8N_your_help_bot id=7866835280 - 'N8N_help_bot'
+2025-07-14 12:24:55,328 - __main__ - v3.0 - INFO - 📊 Производительность: Uptime: 0.1ч, RPM: 0.0, Errors: 0.0%, CPU: 3.8%, RAM: 52.3% (15.1GB free)
+2025-07-14 12:24:55,328 - __main__ - v3.0 - INFO - 🛑 Получен сигнал остановки
+2025-07-14 12:24:55,328 - __main__ - v3.0 - INFO - 🔄 Начинаем корректное завершение...
+2025-07-14 12:24:55,328 - aiogram.dispatcher - v3.0 - INFO - Polling stopped
+2025-07-14 12:24:55,328 - __main__ - v3.0 - INFO - ✅ Бот корректно остановлен
+2025-07-14 12:24:55,329 - __main__ - v3.0 - INFO - 🔄 Завершение работы бота...
+2025-07-14 12:24:55,329 - aiogram.dispatcher - v3.0 - ERROR - Failed to fetch updates - TelegramNetworkError: HTTP Client says - ServerDisconnectedError: Server disconnected
+2025-07-14 12:24:55,329 - aiogram.dispatcher - v3.0 - WARNING - Sleep for 1.000000 seconds and try again... (tryings = 0, bot id = 7866835280)
+2025-07-14 12:24:55,330 - __main__ - v3.0 - INFO - ✅ Бот остановлен
+2025-07-14 12:24:55,330 - aiogram.dispatcher - v3.0 - INFO - Polling stopped for bot @N8N_your_help_bot id=7866835280 - 'N8N_help_bot'
