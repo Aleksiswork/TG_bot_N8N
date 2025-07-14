@@ -1,7 +1,6 @@
 .env
 files/bonus.pdf
 files/install.pdf
-bot_users.db
-submissions.db
+data/
 **/__pycache__/
 venv/
