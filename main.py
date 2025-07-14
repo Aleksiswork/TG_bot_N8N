@@ -192,7 +192,6 @@ async def main():
 
             while retry_count < max_retries and not shutdown_event.is_set():
                 try:
-                    # Создаем задачу для polling
                     polling_task = asyncio.create_task(
                         dp.start_polling(
                             bot,
@@ -204,14 +203,12 @@ async def main():
                         )
                     )
 
-                    # Ждем либо завершения polling, либо сигнала остановки
                     shutdown_task = asyncio.create_task(shutdown_event.wait())
                     done, pending = await asyncio.wait(
                         [polling_task, shutdown_task],
                         return_when=asyncio.FIRST_COMPLETED
                     )
 
-                    # Отменяем все pending задачи
                     for task in pending:
                         task.cancel()
 
@@ -220,7 +217,7 @@ async def main():
                         logger.info("🛑 Получен сигнал остановки")
                         break
 
-                    # Если polling завершился с ошибкой
+                    # Если polling завершился (даже без ошибки) — проверяем shutdown_event
                     if polling_task in done:
                         try:
                             await polling_task
@@ -239,6 +236,20 @@ async def main():
                                 logger.error(
                                     "❌ Превышено максимальное количество попыток подключения")
                                 break
+                        else:
+                            # Если polling завершился без ошибки, но shutdown_event не установлен — это не Ctrl+C, а что-то другое (например, polling завершился сам)
+                            # Если shutdown_event установлен — выходим из цикла
+                            if shutdown_event.is_set():
+                                logger.info(
+                                    "🛑 Polling завершён, получен сигнал остановки")
+                                break
+                            else:
+                                # Если polling завершился сам по себе (например, из-за ошибки сети), делаем retry
+                                retry_count += 1
+                                wait_time = retry_count * 10
+                                logger.info(
+                                    f"🔄 Polling завершился, повторная попытка через {wait_time} секунд...")
+                                await asyncio.sleep(wait_time)
 
                 except Exception as e:
                     retry_count += 1
