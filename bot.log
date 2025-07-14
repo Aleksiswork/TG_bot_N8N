@@ -306,3 +306,8 @@
 2025-07-14 11:34:48,268 - aiogram.dispatcher - v3.0 - WARNING - Sleep for 1.000000 seconds and try again... (tryings = 0, bot id = 7866835280)
 2025-07-14 11:34:48,270 - __main__ - v3.0 - INFO - ✅ Бот остановлен
 2025-07-14 11:34:48,271 - aiogram.dispatcher - v3.0 - INFO - Polling stopped for bot @N8N_your_help_bot id=7866835280 - 'N8N_help_bot'
+2025-07-14 12:19:54,169 - __main__ - v3.0 - INFO - 🚀 Запуск бота v3.0
+2025-07-14 12:19:54,309 - __main__ - v3.0 - INFO - 🚀 Бот v3.0 запущен
+2025-07-14 12:19:54,309 - __main__ - v3.0 - INFO - 💡 Для остановки нажмите Ctrl+C
+2025-07-14 12:19:54,309 - aiogram.dispatcher - v3.0 - INFO - Start polling
+2025-07-14 12:19:54,856 - aiogram.dispatcher - v3.0 - INFO - Run polling for bot @N8N_your_help_bot id=7866835280 - 'N8N_help_bot'
