@@ -36,7 +36,7 @@ logging.getLogger("handlers.admin").setLevel(logging.WARNING)
 logging.getLogger("database.db").setLevel(logging.WARNING)
 logging.getLogger("database.submissions").setLevel(logging.WARNING)
 
-# Флаг для корректного завершения
+# Глобальный флаг для завершения
 shutdown_event = asyncio.Event()
 
 
