@@ -3,8 +3,9 @@ from aiogram.types import Message, FSInputFile, InlineKeyboardMarkup, InlineKeyb
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from database import Database
-from keyboards import get_admin_keyboard
+from keyboards import get_admin_keyboard, get_bans_keyboard, get_ban_user_keyboard, get_unban_user_keyboard
 from config import FILES_DIR, BOT_VERSION, ADMIN_IDS
+from utils.checks import is_user_banned, ban_user, unban_user, get_ban_info, get_banned_db
 from datetime import datetime
 import os
 import csv
@@ -893,3 +894,294 @@ async def back_to_admin_menu(message: Message, state: FSMContext):
         await state.set_state(SubmissionsViewState.viewing_list)
     else:
         await message.answer("Админ-панель:", reply_markup=get_admin_keyboard())
+
+
+# -------------------------------
+# Обработчики блокировок
+# -------------------------------
+
+
+@router.message(F.text == '🚫 Блокировки')
+async def bans_menu_handler(message: Message):
+    """Меню управления блокировками"""
+    if not message.from_user or message.from_user.id not in ADMIN_IDS:
+        return
+
+    await message.answer("🚫 Управление блокировками:", reply_markup=get_bans_keyboard())
+
+
+@router.message(F.text == '📋 Список заблокированных')
+async def banned_list_handler(message: Message):
+    """Показ списка заблокированных пользователей"""
+    if not message.from_user or message.from_user.id not in ADMIN_IDS:
+        return
+
+    try:
+        banned_db = get_banned_db()
+        banned_users = await banned_db.get_banned_list()
+
+        if not banned_users:
+            await message.answer("✅ Нет заблокированных пользователей")
+            return
+
+        response = f"📋 Заблокированные пользователи ({len(banned_users)}):\n\n"
+
+        for i, user in enumerate(banned_users[:10], 1):
+            user_id = user['user_id']
+            username = user['username'] or "unknown"
+            reason = user['reason'][:50] + \
+                "..." if len(user['reason']) > 50 else user['reason']
+            ban_count = user['ban_count']
+            banned_at = user['banned_at'][:16]
+
+            if user['is_permanent']:
+                status = "🔴 НАВСЕГДА"
+            elif user['expires_at']:
+                status = f"🟡 До {user['expires_at'][:16]}"
+            else:
+                status = "🟠 Временная"
+
+            response += f"{i}. @{username} (ID: {user_id})\n"
+            response += f"   Причина: {reason}\n"
+            response += f"   Статус: {status}\n"
+            response += f"   Блокировок: {ban_count}\n"
+            response += f"   Дата: {banned_at}\n\n"
+
+        if len(banned_users) > 10:
+            response += f"... и ещё {len(banned_users) - 10} пользователей"
+
+        await message.answer(response)
+
+    except Exception as e:
+        logger.error(f"Ошибка получения списка заблокированных: {e}")
+        await message.answer(f"❌ Ошибка: {str(e)}")
+
+
+@router.message(F.text == '📊 Статистика блокировок')
+async def bans_stats_handler(message: Message):
+    """Показ статистики блокировок"""
+    if not message.from_user or message.from_user.id not in ADMIN_IDS:
+        return
+
+    try:
+        banned_db = get_banned_db()
+        stats = await banned_db.get_ban_stats()
+
+        response = f"📊 Статистика блокировок:\n\n"
+        response += f"🔴 Всего заблокированных: {stats['total']}\n"
+        response += f"🟡 Временные блокировки: {stats['temporary']}\n"
+        response += f"🔴 Постоянные блокировки: {stats['permanent']}\n"
+        response += f"📅 Заблокировано сегодня: {stats['today']}\n"
+
+        await message.answer(response)
+
+    except Exception as e:
+        logger.error(f"Ошибка получения статистики блокировок: {e}")
+        await message.answer(f"❌ Ошибка: {str(e)}")
+
+
+@router.message(F.text == '🔍 Найти пользователя')
+async def find_user_handler(message: Message, state: FSMContext):
+    """Поиск пользователя для блокировки/разблокировки"""
+    if not message.from_user or message.from_user.id not in ADMIN_IDS:
+        return
+
+    await message.answer(
+        "🔍 Введите ID пользователя или @username для поиска:\n"
+        "Примеры:\n"
+        "- 123456789\n"
+        "- @username\n"
+        "- username (без @)"
+    )
+    await state.set_state("waiting_user_search")
+
+
+@router.message(F.text == '🧹 Очистить истекшие')
+async def cleanup_expired_handler(message: Message):
+    """Очистка истекших блокировок"""
+    if not message.from_user or message.from_user.id not in ADMIN_IDS:
+        return
+
+    try:
+        banned_db = get_banned_db()
+        cleaned_count = await banned_db.cleanup_expired_bans()
+
+        await message.answer(f"✅ Очищено {cleaned_count} истекших блокировок")
+
+    except Exception as e:
+        logger.error(f"Ошибка очистки истекших блокировок: {e}")
+        await message.answer(f"❌ Ошибка: {str(e)}")
+
+
+@router.message(F.text == '⬅️ Назад в админ-панель')
+async def back_to_admin_from_bans(message: Message, state: FSMContext):
+    """Возврат из меню блокировок в админ-панель"""
+    if not message.from_user or message.from_user.id not in ADMIN_IDS:
+        return
+
+    await message.answer("Админ-панель:", reply_markup=get_admin_keyboard())
+    await state.clear()
+
+
+# Состояния для поиска пользователей
+class BanStates(StatesGroup):
+    waiting_user_search = State()
+    waiting_ban_reason = State()
+
+
+@router.message(BanStates.waiting_user_search)
+async def process_user_search(message: Message, state: FSMContext):
+    """Обработка поиска пользователя"""
+    if not message.from_user or message.from_user.id not in ADMIN_IDS:
+        return
+
+    search_query = message.text.strip() if message.text else ""
+
+    try:
+        # Парсим ID или username
+        user_id = None
+        username = None
+
+        if search_query.isdigit():
+            user_id = int(search_query)
+        elif search_query.startswith('@'):
+            username = search_query[1:]
+        else:
+            username = search_query
+
+        # Проверяем, заблокирован ли пользователь
+        if user_id:
+            is_banned = await is_user_banned(user_id)
+            ban_info = await get_ban_info(user_id) if is_banned else None
+        else:
+            # Для username нужно найти ID (упрощенная версия)
+            await message.answer("⚠️ Поиск по username пока не поддерживается. Используйте ID пользователя.")
+            await state.clear()
+            return
+
+        if is_banned and ban_info:
+            # Пользователь заблокирован - предлагаем разблокировать
+            keyboard = get_unban_user_keyboard(
+                user_id, ban_info.get('username'))
+            await message.answer(
+                f"🔍 Найден заблокированный пользователь:\n\n"
+                f"ID: {user_id}\n"
+                f"Username: @{ban_info.get('username', 'unknown')}\n"
+                f"Причина: {ban_info.get('reason', 'Не указана')}\n"
+                f"Блокировок: {ban_info.get('ban_count', 1)}\n"
+                f"Дата: {ban_info.get('banned_at', 'Неизвестно')[:16]}\n\n"
+                f"Хотите разблокировать?",
+                reply_markup=keyboard
+            )
+        else:
+            # Пользователь не заблокирован - предлагаем заблокировать
+            keyboard = get_ban_user_keyboard(user_id, "unknown")
+            await message.answer(
+                f"🔍 Найден пользователь:\n\n"
+                f"ID: {user_id}\n"
+                f"Username: @unknown\n\n"
+                f"Пользователь не заблокирован. Хотите заблокировать?",
+                reply_markup=keyboard
+            )
+
+        await state.clear()
+
+    except Exception as e:
+        logger.error(f"Ошибка поиска пользователя: {e}")
+        await message.answer(f"❌ Ошибка поиска: {str(e)}")
+        await state.clear()
+
+
+@router.callback_query(F.data.startswith("ban_user:"))
+async def ban_user_callback(callback: CallbackQuery, state: FSMContext):
+    """Обработка блокировки пользователя"""
+    if not callback.from_user or callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("❌ У вас нет доступа")
+        return
+
+    user_id = int(callback.data.split(":")[1]) if callback.data else 0
+
+    if callback.message:
+        await callback.message.edit_text(  # type: ignore
+            f"🚫 Блокировка пользователя {user_id}\n\n"
+            f"Введите причину блокировки:"
+        )
+
+    await state.update_data(ban_user_id=user_id)
+    await state.set_state(BanStates.waiting_ban_reason)
+
+
+@router.callback_query(F.data.startswith("unban_user:"))
+async def unban_user_callback(callback: CallbackQuery):
+    """Обработка разблокировки пользователя"""
+    if not callback.from_user or callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("❌ У вас нет доступа")
+        return
+
+    user_id = int(callback.data.split(":")[1]) if callback.data else 0
+
+    try:
+        success = await unban_user(user_id)
+
+        if success and callback.message:
+            await callback.answer(f"✅ Пользователь {user_id} разблокирован")
+        elif callback.message:
+            await callback.answer(f"❌ Ошибка разблокировки пользователя {user_id}")
+
+    except Exception as e:
+        logger.error(f"Ошибка разблокировки: {e}")
+        if callback.message:
+            await callback.answer(f"❌ Ошибка: {str(e)}")
+
+
+@router.callback_query(F.data == "cancel_ban")
+async def cancel_ban_callback(callback: CallbackQuery):
+    """Отмена блокировки"""
+    await callback.answer("❌ Блокировка отменена")
+
+
+@router.callback_query(F.data == "cancel_unban")
+async def cancel_unban_callback(callback: CallbackQuery):
+    """Отмена разблокировки"""
+    await callback.answer("❌ Разблокировка отменена")
+
+
+@router.message(BanStates.waiting_ban_reason)
+async def process_ban_reason(message: Message, state: FSMContext):
+    """Обработка причины блокировки"""
+    if not message.from_user or message.from_user.id not in ADMIN_IDS:
+        return
+
+    user_data = await state.get_data()
+    ban_user_id = user_data.get('ban_user_id')
+    reason = message.text.strip() if message.text else ""
+
+    if not ban_user_id or not reason:
+        await message.answer("❌ Ошибка: не удалось получить данные")
+        await state.clear()
+        return
+
+    try:
+        # Блокируем пользователя
+        ban_result = await ban_user(ban_user_id, "unknown", reason, message.from_user.id)
+
+        ban_count = ban_result.get('ban_count', 1)
+        duration = "24 часа" if ban_count == 1 else "7 дней" if ban_count == 2 else "навсегда"
+
+        await message.answer(
+            f"✅ Пользователь {ban_user_id} заблокирован\n\n"
+            f"Причина: {reason}\n"
+            f"Длительность: {duration}\n"
+            f"Блокировка №{ban_count}"
+        )
+
+    except ValueError as e:
+        if "администратора" in str(e):
+            await message.answer("❌ Невозможно заблокировать администратора")
+        else:
+            await message.answer(f"❌ Ошибка блокировки: {str(e)}")
+    except Exception as e:
+        logger.error(f"Ошибка блокировки: {e}")
+        await message.answer(f"❌ Ошибка блокировки: {str(e)}")
+
+    await state.clear()

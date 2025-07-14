@@ -17,9 +17,10 @@ import signal
 import sys
 import threading
 from handlers.common import router as common_router
-from handlers.user import router as user_router
+from handlers.user import router as user_router, set_bot_instance
 from handlers.admin import router as admin_router
 from database.submissions import SubmissionDB
+from database.banned import BannedDB
 from contextlib import asynccontextmanager
 
 # Настройка логирования
@@ -116,14 +117,16 @@ async def lifespan():
     # Инициализация всех БД и таблиц ДО запуска бота
     await Database.init_all()
 
-    # Создаём экземпляр SubmissionDB для последующего закрытия
+    # Создаём экземпляры БД для последующего закрытия
     submission_db = SubmissionDB()
+    banned_db = BannedDB()
 
     try:
         yield submission_db
     finally:
         logger.info("🔄 Завершение работы бота...")
         await submission_db.close()
+        await banned_db.close()
 
         # Закрываем соединения с основной БД
         db = Database()
@@ -147,6 +150,9 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
         write_timeout=30,
         pool_timeout=30
     )
+
+    # Устанавливаем глобальный экземпляр бота для автоматической блокировки
+    set_bot_instance(bot)
 
     dp = Dispatcher()
 

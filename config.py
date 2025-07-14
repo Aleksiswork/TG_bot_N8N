@@ -21,7 +21,7 @@ print(
 load_dotenv(env_path)
 
 # Версия бота
-BOT_VERSION = "3.0"
+BOT_VERSION = "3.1"
 
 # Базовые пути
 BASE_DIR = Path(__file__).parent

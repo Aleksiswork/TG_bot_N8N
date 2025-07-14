@@ -6,6 +6,7 @@ from typing import Optional, Union
 from aiogram import Bot
 from aiogram.types import Message, User
 from config import config
+from database.banned import BannedDB
 
 logger = logging.getLogger(__name__)
 
@@ -208,3 +209,94 @@ def get_error_message(error: Exception) -> str:
     else:
         logger.error(f"Неизвестная ошибка: {error}")
         return "❌ Произошла неизвестная ошибка"
+
+
+# Глобальный экземпляр БД блокировок
+_banned_db = None
+
+
+def get_banned_db() -> BannedDB:
+    """Получает экземпляр БД блокировок"""
+    global _banned_db
+    if _banned_db is None:
+        _banned_db = BannedDB()
+    return _banned_db
+
+
+async def is_user_banned(user_id: int) -> bool:
+    """
+    Проверяет, заблокирован ли пользователь
+
+    Args:
+        user_id: ID пользователя
+
+    Returns:
+        bool: True если пользователь заблокирован
+    """
+    try:
+        banned_db = get_banned_db()
+        return await banned_db.is_banned(user_id)
+    except Exception as e:
+        logger.error(f"Ошибка проверки блокировки: {e}")
+        return False
+
+
+async def get_ban_info(user_id: int) -> Optional[dict]:
+    """
+    Получает информацию о блокировке пользователя
+
+    Args:
+        user_id: ID пользователя
+
+    Returns:
+        Optional[dict]: Информация о блокировке или None
+    """
+    try:
+        banned_db = get_banned_db()
+        return await banned_db.get_ban_info(user_id)
+    except Exception as e:
+        logger.error(f"Ошибка получения информации о блокировке: {e}")
+        return None
+
+
+async def ban_user(user_id: int, username: str, reason: str, banned_by: int) -> dict:
+    """
+    Блокирует пользователя
+
+    Args:
+        user_id: ID пользователя
+        username: Username пользователя
+        reason: Причина блокировки
+        banned_by: ID администратора
+
+    Returns:
+        dict: Информация о блокировке
+    """
+    # Проверяем, не является ли пользователь администратором
+    if is_admin(user_id):
+        raise ValueError("Невозможно заблокировать администратора")
+
+    try:
+        banned_db = get_banned_db()
+        return await banned_db.ban_user(user_id, username, reason, banned_by)
+    except Exception as e:
+        logger.error(f"Ошибка блокировки пользователя: {e}")
+        raise
+
+
+async def unban_user(user_id: int) -> bool:
+    """
+    Разблокирует пользователя
+
+    Args:
+        user_id: ID пользователя
+
+    Returns:
+        bool: True если разблокировка успешна
+    """
+    try:
+        banned_db = get_banned_db()
+        return await banned_db.unban_user(user_id)
+    except Exception as e:
+        logger.error(f"Ошибка разблокировки пользователя: {e}")
+        return False

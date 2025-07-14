@@ -1,3 +1,6 @@
+import asyncio
+import time
+from typing import Optional
 from aiogram import Router, F, Bot, types
 from aiogram.types import Message, FSInputFile, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
@@ -7,6 +10,7 @@ from keyboards import (
     get_main_keyboard
 )
 from utils import check_subscription
+from utils.checks import is_user_banned, ban_user, get_user_info, get_ban_info
 from config import FILES_DIR, ADMIN_IDS
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import ReplyKeyboardRemove
@@ -33,6 +37,117 @@ except Exception as e:
     db = None
     logger.error(f"Ошибка инициализации Database: {e}")
 
+# Система отслеживания активности для автоматической блокировки
+user_activity = {}  # {user_id: {'messages': [], 'last_message': timestamp}}
+
+
+async def check_user_activity(user_id: int, message_text: Optional[str] = None) -> tuple[bool, str]:
+    """
+    Проверяет активность пользователя и автоматически блокирует при нарушении правил
+
+    Returns:
+        tuple[bool, str]: (можно продолжить, причина блокировки если заблокирован)
+    """
+    current_time = time.time()
+
+    if user_id not in user_activity:
+        user_activity[user_id] = {
+            'messages': [],
+            'last_message': current_time,
+            'duplicate_count': 0,
+            'last_text': None
+        }
+
+    user_data = user_activity[user_id]
+
+    # Очищаем старые сообщения (старше 1 минуты)
+    user_data['messages'] = [msg for msg in user_data['messages']
+                             if current_time - msg < 60]
+
+    # Добавляем текущее сообщение
+    user_data['messages'].append(current_time)
+    user_data['last_message'] = current_time
+
+    # Проверяем количество сообщений за минуту
+    if len(user_data['messages']) > 5:
+        reason = "Спам: более 5 сообщений за минуту"
+        await auto_ban_user(user_id, reason)
+        return False, reason
+
+    # Проверяем дублирование сообщений
+    if message_text:
+        if user_data['last_text'] == message_text:
+            user_data['duplicate_count'] += 1
+            if user_data['duplicate_count'] >= 3:
+                reason = "Спам: отправка одинаковых сообщений"
+                await auto_ban_user(user_id, reason)
+                return False, reason
+        else:
+            user_data['duplicate_count'] = 0
+            user_data['last_text'] = message_text
+
+    return True, ""
+
+
+async def auto_ban_user(user_id: int, reason: str):
+    """Автоматически блокирует пользователя"""
+    try:
+        # Получаем информацию о пользователе из БД или создаем базовую
+        username = "unknown"
+        try:
+            if db:
+                # Получаем всех пользователей и ищем нужного
+                users = await db.get_all_users()
+                for user in users:
+                    if user[0] == user_id:  # user[0] is user_id
+                        username = user[1] or "unknown"  # user[1] is username
+                        break
+                else:
+                    username = "unknown"
+        except:
+            username = "unknown"
+
+        # Блокируем пользователя
+        # 0 = система
+        ban_result = await ban_user(user_id, username, reason, 0)
+
+        # Уведомляем всех админов
+        if bot:
+            for admin_id in ADMIN_IDS:
+                try:
+                    ban_count = ban_result.get('ban_count', 1)
+                    duration = "24 часа" if ban_count == 1 else "7 дней" if ban_count == 2 else "навсегда"
+
+                    await bot.send_message(
+                        admin_id,
+                        f"🚫 Автоматическая блокировка пользователя:\n"
+                        f"ID: {user_id}\n"
+                        f"Username: @{username}\n"
+                        f"Причина: {reason}\n"
+                        f"Блокировка: {duration}"
+                    )
+                except Exception as e:
+                    logger.error(f"Ошибка уведомления админа {admin_id}: {e}")
+
+    except ValueError as e:
+        if "администратора" in str(e):
+            logger.info(
+                f"Попытка автоматической блокировки администратора {user_id} отклонена")
+        else:
+            logger.error(f"Ошибка автоматической блокировки: {e}")
+    except Exception as e:
+        logger.error(f"Ошибка автоматической блокировки: {e}")
+
+
+# Глобальная переменная для бота (будет установлена в main.py)
+bot = None
+
+
+def set_bot_instance(bot_instance):
+    """Устанавливает глобальный экземпляр бота"""
+    global bot
+    bot = bot_instance
+
 # -------------------------------
 # Обработчики материалов
 # -------------------------------
@@ -41,6 +156,19 @@ except Exception as e:
 @router.message(F.text == "📨 Обратная связь")
 async def start_feedback(message: Message, state: FSMContext):
     """Начало процесса отправки обратной связи"""
+    if not message.from_user:
+        return
+
+    # Проверяем блокировку
+    is_banned = await is_user_banned(message.from_user.id)
+    ban_info = await get_ban_info(message.from_user.id) if is_banned else None
+    ban_text = ""
+    if is_banned and ban_info:
+        if ban_info['is_permanent']:
+            ban_text = "\n\n🚫 Вы заблокированы навсегда за нарушение правил. Вы можете отправлять только 1 обращение в неделю, пока блокировка не снята."
+        else:
+            ban_text = f"\n\n🚫 Вы заблокированы до {ban_info['expires_at'][:16]} за нарушение правил. Вы можете отправлять только 1 обращение в неделю, пока блокировка не снята."
+
     # Создаем клавиатуру с кнопками "Отправить", "История" и "Отменить"
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
@@ -50,10 +178,26 @@ async def start_feedback(message: Message, state: FSMContext):
         ],
         resize_keyboard=True
     )
-    await message.answer(
-        "Отправьте ваше сообщение (текст + до 5 фото/файлов). Вы можете отправить несколько сообщений подряд, а затем нажать 'Отправить':",
-        reply_markup=keyboard
-    )
+
+    rules_text = f"""
+📨 **Обратная связь**
+
+Отправьте ваше сообщение (текст + до 5 фото/файлов). Вы можете отправить несколько сообщений подряд, а затем нажать 'Отправить'.
+
+⚠️ **Правила:**
+• Не спамить (не более 5 сообщений подряд за минуту)
+• Не отправлять одинаковые сообщения
+• Не превышать лимит файлов (5 файлов на обращение)
+• Уважительно относиться к администрации
+
+🚫 **Нарушение правил приведет к блокировке:**
+• 1-е нарушение: 24 часа
+• 2-е нарушение: 7 дней  
+• 3-е нарушение: навсегда
+{ban_text}
+"""
+
+    await message.answer(rules_text, reply_markup=keyboard)
     await state.set_state(FeedbackStates.waiting_for_feedback)
     await state.update_data(accumulated_files=[], accumulated_text="")
 
@@ -101,11 +245,23 @@ async def handle_feedback_content(message: types.Message, state: FSMContext, bot
             await state.clear()
             return
 
+        user_id = message.from_user.id
+        is_banned = await is_user_banned(user_id)
+        ban_info = await get_ban_info(user_id) if is_banned else None
+
+        # Проверяем активность пользователя
+        message_text = message.text or message.caption or ""
+        can_continue, ban_reason = await check_user_activity(user_id, message_text)
+
+        if not can_continue:
+            await message.answer(f"🚫 Вы заблокированы автоматически за: {ban_reason}")
+            return
+
         # Проверяем, не нажал ли пользователь кнопку "Отменить"
         if message.text == "❌ Отменить":
             await message.answer(
                 "❌ Отправка отменена.",
-                reply_markup=get_main_keyboard(message.from_user.id)
+                reply_markup=get_main_keyboard(user_id)
             )
             await state.clear()
             return
@@ -131,6 +287,35 @@ async def handle_feedback_content(message: types.Message, state: FSMContext, bot
                 )
                 return
 
+            # --- Новый блок: ограничение для забаненных ---
+            if is_banned and ban_info:
+                await submission_db.init()
+                last_time_str = await submission_db.get_last_submission_time(user_id)
+                import datetime
+                now = datetime.datetime.now()
+                if last_time_str:
+                    try:
+                        last_time = datetime.datetime.fromisoformat(
+                            last_time_str)
+                    except Exception:
+                        last_time = None
+                    if last_time:
+                        delta = now - last_time
+                        if delta.total_seconds() < 7*24*3600:
+                            # осталось времени до следующей попытки
+                            left = 7*24*3600 - delta.total_seconds()
+                            days = int(left // (24*3600))
+                            hours = int((left % (24*3600)) // 3600)
+                            minutes = int((left % 3600) // 60)
+                            left_str = f"{days}д {hours}ч {minutes}м"
+                            if ban_info['is_permanent']:
+                                ban_text = f"🚫 Вы заблокированы навсегда. Следующее обращение будет доступно через: {left_str}"
+                            else:
+                                ban_text = f"🚫 Вы заблокированы до {ban_info['expires_at'][:16]}. Следующее обращение будет доступно через: {left_str}"
+                            await message.answer(ban_text)
+                            return
+            # --- Конец блока ---
+
             # Инициализируем базу данных если нужно
             try:
                 await submission_db.init()
@@ -141,13 +326,12 @@ async def handle_feedback_content(message: types.Message, state: FSMContext, bot
 
             try:
                 await submission_db.add_submission(
-                    user_id=message.from_user.id,
+                    user_id=user_id,
                     username=message.from_user.username or "unknown",
                     text=accumulated_text,
                     file_ids=accumulated_files[:5]  # Ограничиваем 5 файлами
                 )
 
-                user_id = message.from_user.id if message.from_user else 0
                 await message.answer(
                     "✅ Сообщение отправлено! Спасибо за обратную связь.",
                     reply_markup=get_main_keyboard(user_id)
@@ -155,7 +339,6 @@ async def handle_feedback_content(message: types.Message, state: FSMContext, bot
                 await state.clear()
             except Exception as e:
                 logger.error(f"❌ Ошибка сохранения в БД: {e}")
-                user_id = message.from_user.id if message.from_user else 0
                 await message.answer(
                     "❌ Ошибка при сохранении сообщения. Попробуйте позже.",
                     reply_markup=get_main_keyboard(user_id)
@@ -474,6 +657,41 @@ async def back_to_main(message: Message):
         "Главное меню:",
         reply_markup=get_main_keyboard(message.from_user.id)
     )
+
+
+# === Новый обработчик для кнопки "📜 История" вне состояния обратной связи ===
+@router.message(F.text == "📜 История")
+async def show_user_history_anytime(message: types.Message, bot: Bot):
+    """
+    Позволяет любому пользователю (в том числе заблокированному) просматривать свою историю обращений из главного меню.
+    """
+    await submission_db.init()
+    if not submission_db.connection:
+        if message:
+            await message.answer("Ошибка: соединение с базой не установлено.")
+        return
+    user_id = message.from_user.id if message.from_user else None
+    if not user_id:
+        await message.answer("Ошибка: не удалось определить пользователя.")
+        return
+    async with submission_db.connection.cursor() as cursor:
+        await cursor.execute('SELECT id, text_content, file_ids, status, created_at FROM submissions WHERE user_id = ? ORDER BY created_at DESC', (user_id,))
+        rows = await cursor.fetchall()
+    rows = list(rows) if rows else []
+    if not rows:
+        await message.answer("У вас пока нет обращений.")
+        return
+    # Формируем список обращений с кнопками
+    buttons = []
+    for row in rows[:10]:
+        sub_id, text, file_ids, status, created_at = row
+        preview = (
+            text[:30] + "...") if text and len(text) > 30 else (text or "(без текста)")
+        btn_text = f"{created_at[:16]}: {preview}"
+        buttons.append([InlineKeyboardButton(
+            text=btn_text, callback_data=f"mymsg_{sub_id}")])
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    await message.answer("Ваша история обращений:", reply_markup=keyboard)
 
 
 # Обработчик для просмотра конкретного обращения пользователя

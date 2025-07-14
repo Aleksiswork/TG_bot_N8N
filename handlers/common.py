@@ -37,7 +37,7 @@ async def start_command(message: Message, bot: Bot):
     # Сохраняем пользователя в БД
     if db:
         try:
-            await db.save_user(message.from_user)
+            await db.save_user(message.from_user)  # type: ignore
         except Exception as e:
             logger.error(f"Ошибка сохранения пользователя: {e}")
 

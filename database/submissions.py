@@ -266,6 +266,25 @@ class SubmissionDB:
             logger.error(f"❌ Ошибка при пакетном обновлении: {e}")
             raise
 
+    async def get_last_submission_time(self, user_id: int) -> Optional[str]:
+        """
+        Возвращает дату и время последней отправки обращения пользователем (по created_at).
+        """
+        if self.connection is None:
+            raise RuntimeError("Соединение с БД не инициализировано")
+        try:
+            async with self.connection.cursor() as cursor:
+                await cursor.execute(
+                    'SELECT created_at FROM submissions WHERE user_id = ? ORDER BY created_at DESC LIMIT 1',
+                    (user_id,)
+                )
+                row = await cursor.fetchone()
+                return row[0] if row else None
+        except Exception as e:
+            logger.error(
+                f"❌ Ошибка при получении времени последней отправки: {e}")
+            return None
+
     async def close(self):
         """Закрывает соединение с БД"""
         if hasattr(self, 'connection') and self.connection:
