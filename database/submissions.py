@@ -2,8 +2,9 @@ import aiosqlite
 import json
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 from config import DB_SUBMISSIONS_PATH
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -32,11 +33,24 @@ class SubmissionDB:
         Инициализирует соединение с БД
         """
         if self.connection is None:  # Если соединение ещё не создано
-            self.connection = await aiosqlite.connect(str(self.db_path))
+            self.connection = await aiosqlite.connect(
+                str(self.db_path),
+                timeout=30.0,
+                check_same_thread=False
+            )
+
+            # Оптимизации для высокой нагрузки
+            await self.connection.execute("PRAGMA journal_mode=WAL")
+            await self.connection.execute("PRAGMA synchronous=NORMAL")
+            await self.connection.execute("PRAGMA cache_size=10000")
+            await self.connection.execute("PRAGMA temp_store=MEMORY")
+            # 256MB
+            await self.connection.execute("PRAGMA mmap_size=268435456")
+
             await self._create_tables()
 
     async def _create_tables(self):
-        """Создает таблицу submissions"""
+        """Создает таблицу submissions с индексами"""
         if self.connection is None:
             raise RuntimeError("Соединение с БД не инициализировано")
 
@@ -54,6 +68,13 @@ class SubmissionDB:
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+
+        # Создаем индексы для быстрого поиска
+        await self.connection.execute('CREATE INDEX IF NOT EXISTS idx_submissions_user_id ON submissions(user_id)')
+        await self.connection.execute('CREATE INDEX IF NOT EXISTS idx_submissions_status ON submissions(status)')
+        await self.connection.execute('CREATE INDEX IF NOT EXISTS idx_submissions_created_at ON submissions(created_at)')
+        await self.connection.execute('CREATE INDEX IF NOT EXISTS idx_submissions_username ON submissions(username)')
+
         await self.connection.commit()
 
     async def add_submission(self, user_id: int, username: str, text: str, file_ids: list[str]):
@@ -75,30 +96,33 @@ class SubmissionDB:
             logger.error(f"❌ Ошибка при добавлении записи: {e}")
             raise
 
-    async def get_all_submissions(self):
-        """Получает все записи из БД"""
-        if self.connection is None:
-            raise RuntimeError("Соединение с БД не инициализировано")
-
-        try:
-            async with self.connection.cursor() as cursor:
-                await cursor.execute('SELECT * FROM submissions ORDER BY created_at DESC')
-                rows = await cursor.fetchall()
-                return list(rows)
-        except Exception as e:
-            logger.error(f"❌ Ошибка при получении записей: {e}")
-            raise
-
-    async def get_submissions_by_status(self, status: str):
-        """Получает записи по статусу"""
+    async def get_all_submissions(self, limit: int = 100, offset: int = 0):
+        """Получает записи из БД с пагинацией"""
         if self.connection is None:
             raise RuntimeError("Соединение с БД не инициализировано")
 
         try:
             async with self.connection.cursor() as cursor:
                 await cursor.execute(
-                    'SELECT * FROM submissions WHERE status = ? ORDER BY created_at DESC',
-                    (status,)
+                    'SELECT * FROM submissions ORDER BY created_at DESC LIMIT ? OFFSET ?',
+                    (limit, offset)
+                )
+                rows = await cursor.fetchall()
+                return list(rows)
+        except Exception as e:
+            logger.error(f"❌ Ошибка при получении записей: {e}")
+            raise
+
+    async def get_submissions_by_status(self, status: str, limit: int = 100, offset: int = 0):
+        """Получает записи по статусу с пагинацией"""
+        if self.connection is None:
+            raise RuntimeError("Соединение с БД не инициализировано")
+
+        try:
+            async with self.connection.cursor() as cursor:
+                await cursor.execute(
+                    'SELECT * FROM submissions WHERE status = ? ORDER BY created_at DESC LIMIT ? OFFSET ?',
+                    (status, limit, offset)
                 )
                 rows = await cursor.fetchall()
                 return list(rows)
@@ -216,6 +240,30 @@ class SubmissionDB:
                 return stats
         except Exception as e:
             logger.error(f"❌ Ошибка при получении статистики: {e}")
+            raise
+
+    async def batch_update_status(self, submission_ids: List[int], status: str):
+        """Пакетное обновление статуса записей"""
+        if self.connection is None:
+            raise RuntimeError("Соединение с БД не инициализировано")
+
+        if not submission_ids:
+            return
+
+        try:
+            async with self.connection.cursor() as cursor:
+                placeholders = ','.join(['?' for _ in submission_ids])
+                timestamp_field = 'viewed_at' if status == 'viewed' else 'processed_at'
+
+                await cursor.execute(
+                    f'''UPDATE submissions 
+                    SET status = ?, {timestamp_field} = CURRENT_TIMESTAMP 
+                    WHERE id IN ({placeholders})''',
+                    [status] + submission_ids
+                )
+                await self.connection.commit()
+        except Exception as e:
+            logger.error(f"❌ Ошибка при пакетном обновлении: {e}")
             raise
 
     async def close(self):

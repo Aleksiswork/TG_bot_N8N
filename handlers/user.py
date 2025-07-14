@@ -172,37 +172,27 @@ async def handle_feedback_content(message: types.Message, state: FSMContext, bot
 
         # Обработка медиа
         if message.photo:
-            logger.info("📸 Обработка фото...")
             file_id = message.photo[-1].file_id
             accumulated_files.append(file_id)
-            logger.info(f"📸 Добавлено фото: {file_id}")
         elif message.document:
-            logger.info("📄 Обработка документа...")
             file_id = message.document.file_id
             accumulated_files.append(file_id)
-            logger.info(f"📄 Добавлен документ: {file_id}")
 
         # Обработка текста (включая caption к медиа)
         text_to_add = None
         if message.text:
-            logger.info("📝 Обработка текста из message.text...")
             text_to_add = message.text
         elif message.caption:
-            logger.info("📝 Обработка текста из message.caption...")
             text_to_add = message.caption
 
         if text_to_add:
-            logger.info(f"📝 Добавляем текст: {text_to_add[:50]}...")
             if accumulated_text:
                 new_text = accumulated_text + "\n\n" + text_to_add
             else:
                 new_text = text_to_add
             accumulated_text = new_text
-            logger.info(
-                f"📝 Итоговый накопленный текст: {len(accumulated_text)} символов")
 
         # Обновляем состояние
-        logger.info("💾 Обновление состояния...")
         await state.update_data(accumulated_files=accumulated_files, accumulated_text=accumulated_text)
 
         # Показываем клавиатуру с кнопками "Отправить" и "Отменить"
@@ -223,9 +213,7 @@ async def handle_feedback_content(message: types.Message, state: FSMContext, bot
 
         status_message += f"\nПродолжайте добавлять контент или нажмите 'Отправить' для завершения."
 
-        logger.info("📤 Отправка статусного сообщения...")
         await message.answer(status_message, reply_markup=keyboard)
-        logger.info("✅ Обработка сообщения завершена успешно")
 
     except Exception as e:
         logger.error(f"❌ Критическая ошибка в handle_feedback_content: {e}")
@@ -378,7 +366,7 @@ async def send_db_guide(message: Message, bot: Bot):
 
     await db.save_user(message.from_user)
 
-    if not await check_subscription(bot, message.from_user.id):
+    if not await check_subscription(message.from_user.id, bot):
         await message.answer(
             "❌ Для доступа к материалам необходимо подписаться на канал!",
             reply_markup=get_subscribe_keyboard()
@@ -408,7 +396,7 @@ async def send_firewall_guide(message: Message, bot: Bot):
         return
     await db.save_user(message.from_user)
 
-    if not await check_subscription(bot, message.from_user.id):
+    if not await check_subscription(message.from_user.id, bot):
         await message.answer(
             "❌ Для доступа к материалам необходимо подписаться на канал!",
             reply_markup=get_subscribe_keyboard()
@@ -465,7 +453,7 @@ async def send_tips(message: Message, bot: Bot):
         return
     await db.save_user(message.from_user)
 
-    if not await check_subscription(bot, message.from_user.id):
+    if not await check_subscription(message.from_user.id, bot):
         await message.answer(
             "❌ Для доступа необходимо подписаться на канал!",
             reply_markup=get_subscribe_keyboard()
