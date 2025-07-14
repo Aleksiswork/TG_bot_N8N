@@ -377,3 +377,17 @@
 2025-07-14 13:39:45,869 - aiogram.dispatcher - v3.1 - WARNING - Sleep for 1.000000 seconds and try again... (tryings = 0, bot id = 7866835280)
 2025-07-14 13:39:45,869 - __main__ - v3.1 - INFO - ✅ Бот остановлен
 2025-07-14 13:39:45,870 - aiogram.dispatcher - v3.1 - INFO - Polling stopped for bot @N8N_your_help_bot id=7866835280 - 'N8N_help_bot'
+2025-07-14 16:37:27,316 - __main__ - v3.1 - INFO - 🚀 Запуск бота v3.1
+2025-07-14 16:37:27,464 - __main__ - v3.1 - INFO - 🚀 Бот v3.1 запущен
+2025-07-14 16:37:27,464 - __main__ - v3.1 - INFO - 💡 Для остановки нажмите Ctrl+C
+2025-07-14 16:37:27,464 - aiogram.dispatcher - v3.1 - INFO - Start polling
+2025-07-14 16:37:28,183 - aiogram.dispatcher - v3.1 - INFO - Run polling for bot @N8N_your_help_bot id=7866835280 - 'N8N_help_bot'
+2025-07-14 16:37:43,874 - __main__ - v3.1 - INFO - 🛑 Получен сигнал остановки
+2025-07-14 16:37:43,874 - __main__ - v3.1 - INFO - 🔄 Начинаем корректное завершение...
+2025-07-14 16:37:43,874 - aiogram.dispatcher - v3.1 - INFO - Polling stopped
+2025-07-14 16:37:43,874 - __main__ - v3.1 - INFO - ✅ Бот корректно остановлен
+2025-07-14 16:37:43,874 - __main__ - v3.1 - INFO - 🔄 Завершение работы бота...
+2025-07-14 16:37:43,875 - aiogram.dispatcher - v3.1 - ERROR - Failed to fetch updates - TelegramNetworkError: HTTP Client says - ServerDisconnectedError: Server disconnected
+2025-07-14 16:37:43,875 - aiogram.dispatcher - v3.1 - WARNING - Sleep for 1.000000 seconds and try again... (tryings = 0, bot id = 7866835280)
+2025-07-14 16:37:43,876 - __main__ - v3.1 - INFO - ✅ Бот остановлен
+2025-07-14 16:37:43,876 - aiogram.dispatcher - v3.1 - INFO - Polling stopped for bot @N8N_your_help_bot id=7866835280 - 'N8N_help_bot'
