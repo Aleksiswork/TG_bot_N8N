@@ -168,7 +168,7 @@ async def performance_monitoring_task():
     """Задача мониторинга производительности"""
     while True:
         try:
-            await asyncio.sleep(300)  # Каждые 5 минут
+            await asyncio.sleep(14400)  # Каждые 4 часа
             performance_monitor.log_performance()
         except Exception as e:
             logger.error(f"❌ Ошибка мониторинга: {e}")

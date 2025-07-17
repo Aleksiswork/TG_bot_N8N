@@ -2,7 +2,7 @@ import asyncio
 import time
 from typing import Optional
 from aiogram import Router, F, Bot, types
-from aiogram.types import Message, FSInputFile, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, FSInputFile, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
 from aiogram.fsm.context import FSMContext
 from database import Database
 from keyboards import (
@@ -21,6 +21,7 @@ from database.submissions import SubmissionDB
 
 class FeedbackStates(StatesGroup):
     waiting_for_feedback = State()
+    waiting_for_reply = State()
 
 
 class BroadcastState(StatesGroup):
@@ -687,7 +688,9 @@ async def show_user_history_anytime(message: types.Message, bot: Bot):
         sub_id, text, file_ids, status, created_at = row
         preview = (
             text[:30] + "...") if text and len(text) > 30 else (text or "(без текста)")
-        btn_text = f"{created_at[:16]}: {preview}"
+        # Добавляем индикатор ответа администратора
+        response_indicator = " 💬" if status == "answered" else ""
+        btn_text = f"{created_at[:16]}: {preview}{response_indicator}"
         buttons.append([InlineKeyboardButton(
             text=btn_text, callback_data=f"mymsg_{sub_id}")])
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -707,35 +710,247 @@ async def show_user_submission_detail(callback: types.CallbackQuery, state: FSMC
         await callback.answer()
         return
     sub_id = int(callback.data.split("_")[1])
-    async with submission_db.connection.cursor() as cursor:
-        await cursor.execute('SELECT text_content, file_ids, status, admin_response, created_at FROM submissions WHERE id = ?', (sub_id,))
-        row = await cursor.fetchone()
-    if not row:
+    # Получаем историю переписки
+    history = await submission_db.get_conversation_history(sub_id)
+
+    if not history:
         if callback.message:
             await callback.message.answer("Обращение не найдено")
         await callback.answer()
         return
-    row = list(row)
-    text, file_ids, status, admin_response, created_at = row
-    response = f"💬 Ваше обращение #{sub_id}\n"
-    response += f"📅 Дата: {created_at}\n\n"
-    response += f"📝 Текст:\n{text or '(нет текста)'}\n\n"
-    # Добавляем кнопку "Назад"
-    back_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+
+        # Отправляем заголовок истории
+    header_text = f"💬 История переписки #{sub_id}\n\n"
+    await bot.send_message(callback.from_user.id, header_text)
+
+    # Отправляем каждое сообщение отдельно с его файлами
+    for i, (sender_role, text, file_ids, created_at) in enumerate(history, 1):
+        sender_label = "👤 (Вы)" if sender_role == "user" else "👨‍💼 (Админ)"
+        message_text = f"{sender_label} - {created_at[:16]}\n{text or '(нет текста)'}"
+
+        # Если есть файлы, отправляем медиа-группу
+        if file_ids and file_ids != '[]':
+            try:
+                import json
+                files = json.loads(file_ids)
+                if files:
+                    # Отправляем медиа-группу с текстом
+                    media_group = []
+                    for j, file_id in enumerate(files[:5]):
+                        if j == 0:  # Первый файл с текстом
+                            media_group.append(InputMediaPhoto(
+                                media=file_id,
+                                caption=message_text
+                            ))
+                        else:  # Остальные файлы без текста
+                            media_group.append(InputMediaPhoto(media=file_id))
+
+                    await bot.send_media_group(callback.from_user.id, media_group)
+                else:
+                    # Если нет файлов, отправляем только текст
+                    await bot.send_message(callback.from_user.id, message_text)
+            except Exception as e:
+                logger.error(f"Ошибка отправки медиа-группы: {e}")
+                # Если не удалось отправить медиа-группу, отправляем текст
+                await bot.send_message(callback.from_user.id, message_text)
+        else:
+            # Если нет файлов, отправляем только текст
+            await bot.send_message(callback.from_user.id, message_text)
+
+    # Отправляем кнопки действий в последнем сообщении
+    actions_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="💬 Ответить", callback_data=f"reply_user_{sub_id}")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="myhistory_back")]
     ])
-    if callback.message:
-        await callback.message.answer(response, reply_markup=back_keyboard)
-    # Если есть файлы, отправляем их отдельно
-    if file_ids:
-        import json
-        files = json.loads(file_ids)
-        for file_id in files[:5]:
-            try:
-                await bot.send_photo(callback.from_user.id, file_id)
-            except Exception:
-                pass
+
+    await bot.send_message(
+        callback.from_user.id,
+        "🎯 Ваши действия:",
+        reply_markup=actions_keyboard
+    )
+
     await callback.answer()
+
+
+# Обработчик для кнопки "Ответить" пользователя
+@router.callback_query(F.data.startswith("reply_user_"))
+async def handle_user_reply(callback: types.CallbackQuery, state: FSMContext):
+    """Обработка ответа пользователя на свое обращение"""
+    if not callback.data:
+        await callback.answer()
+        return
+
+    sub_id = int(callback.data.split("_")[2])
+
+    # Сохраняем ID обращения в состоянии
+    await state.set_state(FeedbackStates.waiting_for_reply)
+    await state.update_data(submission_id=sub_id)
+
+    # Создаем клавиатуру с кнопками "Отправить" и "Отменить"
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📤 Отправить")],
+            [KeyboardButton(text="❌ Отменить")]
+        ],
+        resize_keyboard=True
+    )
+
+    response = f"💬 Ответ на обращение #{sub_id}\n\n"
+    response += "Отправьте ваше сообщение (текст + до 5 фото/файлов). Вы можете отправить несколько сообщений подряд, а затем нажать 'Отправить'."
+
+    if callback.message:
+        await callback.message.answer(response, reply_markup=keyboard)
+
+    await callback.answer()
+
+
+# Обработчик для ответа пользователя на свое обращение
+@router.message(FeedbackStates.waiting_for_reply, F.photo | F.document | F.text)
+async def handle_user_reply_content(message: types.Message, state: FSMContext, bot: Bot):
+    """Обработка ответа пользователя на свое обращение"""
+    try:
+        if not message.from_user:
+            logger.error("❌ Не удалось определить пользователя")
+            await message.answer("❌ Ошибка: не удалось определить пользователя")
+            await state.clear()
+            return
+
+        user_id = message.from_user.id
+        user_data = await state.get_data()
+        submission_id = user_data.get('submission_id')
+
+        if not submission_id:
+            await message.answer("❌ Ошибка: ID обращения не найден")
+            await state.clear()
+            return
+
+        # Проверяем, не нажал ли пользователь кнопку "Отменить"
+        if message.text == "❌ Отменить":
+            await message.answer(
+                "❌ Ответ отменен.",
+                reply_markup=get_main_keyboard(user_id)
+            )
+            await state.clear()
+            return
+
+        # Проверяем, не нажал ли пользователь кнопку "Отправить"
+        if message.text == "📤 Отправить":
+            accumulated_text = user_data.get('accumulated_text', '') or ''
+            accumulated_text = accumulated_text.strip()
+            accumulated_files = user_data.get('accumulated_files', [])
+
+            if not accumulated_text and not accumulated_files:
+                await message.answer(
+                    "❌ Вы не отправили ни текста, ни файлов. Пожалуйста, добавьте контент перед отправкой.",
+                    reply_markup=ReplyKeyboardMarkup(
+                        keyboard=[
+                            [KeyboardButton(text="📤 Отправить")],
+                            [KeyboardButton(text="❌ Отменить")]
+                        ],
+                        resize_keyboard=True
+                    )
+                )
+                return
+
+            try:
+                await submission_db.init()
+
+                # Получаем conversation_id из submissions
+                submission = await submission_db.get_submission_by_id(submission_id)
+                if not submission:
+                    await message.answer("❌ Обращение не найдено")
+                    await state.clear()
+                    return
+
+                # conversation_id в новой структуре
+                conversation_id = submission[6]
+
+                # Добавляем сообщение пользователя в переписку
+                await submission_db.add_message(
+                    conversation_id=conversation_id,
+                    sender_id=user_id,
+                    receiver_id=0,  # 0 для администраторов
+                    sender_role='user',
+                    text=accumulated_text,
+                    file_ids=accumulated_files[:5]
+                )
+
+                await message.answer(
+                    "✅ Ваш ответ отправлен!",
+                    reply_markup=get_main_keyboard(user_id)
+                )
+                await state.clear()
+            except Exception as e:
+                logger.error(f"❌ Ошибка сохранения ответа в БД: {e}")
+                await message.answer(
+                    "❌ Ошибка при сохранении ответа. Попробуйте позже.",
+                    reply_markup=get_main_keyboard(user_id)
+                )
+                await state.clear()
+            return
+
+        # Обработка контента (аналогично handle_feedback_content)
+        accumulated_files = user_data.get('accumulated_files', [])
+        accumulated_text = user_data.get('accumulated_text', '') or ''
+
+        # Обработка медиа
+        if message.photo:
+            file_id = message.photo[-1].file_id
+            accumulated_files.append(file_id)
+        elif message.document:
+            file_id = message.document.file_id
+            accumulated_files.append(file_id)
+
+        # Обработка текста (включая caption к медиа)
+        text_to_add = None
+        if message.text:
+            text_to_add = message.text
+        elif message.caption:
+            text_to_add = message.caption
+
+        if text_to_add:
+            if accumulated_text:
+                new_text = accumulated_text + "\n\n" + text_to_add
+            else:
+                new_text = text_to_add
+            accumulated_text = new_text
+
+        # Обновляем состояние
+        await state.update_data(accumulated_files=accumulated_files, accumulated_text=accumulated_text)
+
+        # Показываем клавиатуру с кнопками "Отправить" и "Отменить"
+        keyboard = ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="📤 Отправить")],
+                [KeyboardButton(text="❌ Отменить")]
+            ],
+            resize_keyboard=True
+        )
+
+        # Формируем сообщение о текущем состоянии
+        status_message = f"✅ Контент добавлен!\n"
+        if accumulated_text:
+            status_message += f"📝 Текст: {len(accumulated_text)} символов\n"
+        if accumulated_files:
+            status_message += f"📁 Файлов: {len(accumulated_files)}/5\n"
+
+        status_message += f"\nПродолжайте добавлять контент или нажмите 'Отправить' для завершения."
+
+        await message.answer(status_message, reply_markup=keyboard)
+
+    except Exception as e:
+        logger.error(f"❌ Критическая ошибка в handle_user_reply_content: {e}")
+        try:
+            user_id = message.from_user.id if message.from_user else 0
+            await message.answer(
+                "❌ Произошла ошибка при обработке сообщения. Попробуйте еще раз.",
+                reply_markup=get_main_keyboard(user_id)
+            )
+            await state.clear()
+        except Exception as cleanup_error:
+            logger.error(f"❌ Ошибка при очистке состояния: {cleanup_error}")
+
 
 # Обработчик для кнопки "Назад" в истории обращений
 

@@ -1,11 +1,5 @@
 """
-Telegram Bot v3.0
-Обновления:
-- Улучшенная архитектура и типизация
-- Расширенные настройки конфигурации
-- Улучшенная валидация и обработка ошибок
-- Поддержка множественных админов
-- Настройки логирования
+Telegram Bot v3.2
 """
 import os
 from dotenv import load_dotenv, find_dotenv
@@ -21,7 +15,7 @@ print(
 load_dotenv(env_path)
 
 # Версия бота
-BOT_VERSION = "3.1"
+BOT_VERSION = "3.2"
 
 # Базовые пути
 BASE_DIR = Path(__file__).parent

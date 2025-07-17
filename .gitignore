@@ -4,3 +4,4 @@ files/install.pdf
 data/
 **/__pycache__/
 venv/
+bot.log

@@ -1,5 +1,5 @@
 from aiogram import Router, F, Bot, types
-from aiogram.types import Message, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, InputMediaPhoto, InputMediaDocument
+from aiogram.types import Message, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, InputMediaPhoto, InputMediaDocument, MediaUnion
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from database import Database
@@ -14,7 +14,7 @@ import asyncio
 from aiogram.types import ReplyKeyboardRemove
 from database.submissions import SubmissionDB
 import json
-from typing import Union, Optional, Any
+from typing import Union, Optional, Any, Sequence, cast
 import platform
 
 router = Router()
@@ -224,6 +224,10 @@ async def send_submissions_menu(message: Union[Message, CallbackQuery, Any]):
                         text="✅ Решенные", callback_data="submissions_solved"),
                     InlineKeyboardButton(
                         text="👁️ Просмотренные", callback_data="submissions_viewed")
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="🧹 Очистить БД", callback_data="submissions_clear")
                 ]
             ]
         )
@@ -291,6 +295,53 @@ async def handle_submissions_callback(callback: CallbackQuery, state: FSMContext
                 await callback.answer("❌ Ошибка при возврате в меню предложки")
             return
 
+        # Обрабатываем очистку БД
+        if action == "clear":
+            try:
+                # Создаем клавиатуру подтверждения
+                keyboard = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="✅ Да, очистить с резервной копией",
+                                callback_data="confirm_clear_db"
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                text="❌ Отмена",
+                                callback_data="cancel_clear_db"
+                            )
+                        ]
+                    ]
+                )
+                text = (
+                    "⚠️ **Внимание!**\n\n"
+                    "Вы собираетесь очистить все сообщения и переписки из базы данных обратной связи.\n\n"
+                    "📋 Что произойдет:\n"
+                    "• Создается резервная копия БД с текущей датой\n"
+                    "• Удаляются все сообщения из таблицы messages\n"
+                    "• Удаляются все переписки из таблицы conversations\n"
+                    "• Удаляются все обращения из таблицы submissions\n\n"
+                    "🗂️ Резервная копия будет сохранена в папке с БД\n\n"
+                    "Вы уверены?"
+                )
+                if callback.message and isinstance(callback.message, Message):
+                    try:
+                        await callback.message.edit_text(text, reply_markup=keyboard)
+                    except Exception:
+                        if callback.bot and callback.from_user:
+                            await callback.bot.send_message(callback.from_user.id, text, reply_markup=keyboard)
+                else:
+                    if callback.bot and callback.from_user:
+                        await callback.bot.send_message(callback.from_user.id, text, reply_markup=keyboard)
+                await callback.answer()
+                return
+            except Exception as e:
+                logger.error(f"Ошибка при подготовке очистки БД: {e}")
+                await callback.answer(f"❌ Ошибка: {str(e)}")
+                return
+
         await submission_db.init()
 
         if action == "all":
@@ -313,8 +364,66 @@ async def handle_submissions_callback(callback: CallbackQuery, state: FSMContext
         await state.update_data(submissions=submissions, current_page=0, status_filter=status_filter)
 
     except Exception as e:
-        logger.error(f"Ошибка при обработке callback предложок: {e}")
+        logger.error(f"Ошибка при обработке submissions callback: {e}")
         await callback.answer(f"❌ Ошибка: {str(e)}")
+
+
+@router.callback_query(F.data == "confirm_clear_db")
+async def handle_confirm_clear_db(callback: CallbackQuery):
+    """Подтверждение очистки БД обратной связи"""
+    if not callback.from_user or callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("❌ Доступ запрещен")
+        return
+
+    try:
+        await callback.answer("⏳ Начинаю очистку БД...")
+        backup_path = await submission_db.backup_and_clear_database()
+        text = (
+            f"✅ **База данных обратной связи очищена!**\n\n"
+            f"📁 Резервная копия: `{backup_path}`\n\n"
+            f"🗑️ Удалено:\n"
+            f"• Все сообщения\n"
+            f"• Все переписки\n"
+            f"• Все обращения\n\n"
+            f"🔄 База данных готова к работе"
+        )
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(
+                    text="⬅️ Вернуться в меню предложки",
+                    callback_data="submissions_back"
+                )]
+            ]
+        )
+        if callback.message and isinstance(callback.message, Message):
+            try:
+                await callback.message.edit_text(text)
+                await callback.message.edit_reply_markup(reply_markup=keyboard)
+            except Exception:
+                if callback.bot and callback.from_user:
+                    await callback.bot.send_message(callback.from_user.id, text, reply_markup=keyboard)
+        else:
+            if callback.bot and callback.from_user:
+                await callback.bot.send_message(callback.from_user.id, text, reply_markup=keyboard)
+    except Exception as e:
+        logger.error(f"Ошибка при очистке БД: {e}")
+        if callback.message and isinstance(callback.message, Message):
+            await callback.message.edit_text(f"❌ Ошибка при очистке БД: {str(e)}")
+        else:
+            if callback.bot and callback.from_user:
+                await callback.bot.send_message(callback.from_user.id, f"❌ Ошибка при очистке БД: {str(e)}")
+
+
+@router.callback_query(F.data == "cancel_clear_db")
+async def handle_cancel_clear_db(callback: CallbackQuery):
+    """Отмена очистки БД обратной связи"""
+    if not callback.from_user or callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("❌ Доступ запрещен")
+        return
+
+    # Возвращаемся в меню предложки
+    await send_submissions_menu(callback)
+    await callback.answer("❌ Очистка БД отменена")
 
 
 async def show_submissions_list(message: Union[Message, CallbackQuery, Any], submissions: list, page: int, status_filter: str):
@@ -443,7 +552,7 @@ async def handle_view_submission(callback: CallbackQuery, state: FSMContext):
 
 
 async def send_media_group_with_text(bot: Bot, message: Union[Message, CallbackQuery, Any], files: list, text: str, id_: int, username: str, status_display: str, created_at: str, keyboard: InlineKeyboardMarkup):
-    """Отправляет медиа-группу с текстом и отдельное сообщение с кнопками"""
+    """Отправляет медиа-группу с текстом"""
     try:
         # Ограничиваем количество файлов до 10 (лимит Telegram)
         files = files[:10]
@@ -465,20 +574,10 @@ async def send_media_group_with_text(bot: Bot, message: Union[Message, CallbackQ
             chat_id = message.message.chat.id
         else:
             raise ValueError("Не удалось определить chat_id")
-        # 1. Отправляем медиа-группу
-        await bot.send_media_group(chat_id=chat_id, media=media_group)
-        # 2. Отправляем отдельное сообщение с кнопками
-        info_text = f"💬 Сообщение #{id_} от @{username}\n"
-        info_text += f"📅 Дата: {created_at}\n"
-        info_text += f"Статус: {status_display}\n\n"
-        info_text += f"📝 Текст:\n{text}"
-        await bot.send_message(
-            chat_id=chat_id,
-            text=info_text,
-            reply_markup=keyboard
-        )
+        # Отправляем медиа-группу
+        await bot.send_media_group(chat_id=chat_id, media=cast(list[MediaUnion], media_group))
         logger.info(
-            f"✅ Медиа-группа и меню управления отправлены: {len(files)} файлов")
+            f"✅ Медиа-группа отправлена: {len(files)} файлов")
     except Exception as e:
         logger.error(f"❌ Ошибка при отправке медиа-группы: {e}")
         raise
@@ -486,10 +585,77 @@ async def send_media_group_with_text(bot: Bot, message: Union[Message, CallbackQ
 
 async def show_submission_detail(message: Union[Message, CallbackQuery, Any], submission, bot: Optional[Bot] = None):
     """Показывает детальную информацию о сообщении"""
-    id_, user_id, username, text, file_ids, status, admin_response, processed_at, viewed_at, created_at = submission
+    # Новая структура: id_, user_id, username, text, file_ids, status, conversation_id, processed_at, viewed_at, created_at
+    id_, user_id, username, text, file_ids, status, conversation_id, processed_at, viewed_at, created_at = submission
     status_names = {"new": "🆕 Новая",
                     "viewed": "👁️ Просмотрена", "solved": "✅ Решена"}
     status_display = status_names.get(status, "❓ Неизвестно")
+
+    # Получаем историю переписки
+    history = await submission_db.get_conversation_history(id_)
+
+    # Определяем chat_id
+    chat_id = None
+    if hasattr(message, 'from_user') and message.from_user:
+        chat_id = message.from_user.id
+    elif isinstance(message, CallbackQuery) and message.message and hasattr(message.message, 'chat'):
+        chat_id = message.message.chat.id
+    else:
+        raise ValueError("Не удалось определить chat_id")
+
+    # Отправляем заголовок истории
+    header_text = f"💬 История переписки с @{username} от {created_at[:16]}\n\n"
+    if bot:
+        await bot.send_message(chat_id, header_text)
+    else:
+        await message.answer(header_text)
+
+    # Отправляем каждое сообщение отдельно с его файлами
+    for i, (sender_role, msg_text, msg_files, msg_created_at) in enumerate(history, 1):
+        sender_label = "👤 Пользователь" if sender_role == "user" else "👨‍💼 Администратор"
+        message_text = f"{sender_label} - {msg_created_at[:16]}\n{msg_text or '(нет текста)'}"
+
+        # Если есть файлы, отправляем медиа-группу
+        if msg_files and msg_files != '[]':
+            try:
+                files = json.loads(msg_files)
+                if files:
+                    # Отправляем медиа-группу с текстом
+                    media_group = []
+                    for j, file_id in enumerate(files[:5]):
+                        if j == 0:  # Первый файл с текстом
+                            media_group.append(InputMediaPhoto(
+                                media=file_id,
+                                caption=message_text
+                            ))
+                        else:  # Остальные файлы без текста
+                            media_group.append(InputMediaPhoto(media=file_id))
+
+                    if bot:
+                        await bot.send_media_group(chat_id, cast(list[MediaUnion], media_group))
+                    else:
+                        await message.answer(message_text)
+                else:
+                    # Если нет файлов, отправляем только текст
+                    if bot:
+                        await bot.send_message(chat_id, message_text)
+                    else:
+                        await message.answer(message_text)
+            except Exception as e:
+                logger.error(f"Ошибка отправки медиа-группы: {e}")
+                # Если не удалось отправить медиа-группу, отправляем текст
+                if bot:
+                    await bot.send_message(chat_id, message_text)
+                else:
+                    await message.answer(message_text)
+        else:
+            # Если нет файлов, отправляем только текст
+            if bot:
+                await bot.send_message(chat_id, message_text)
+            else:
+                await message.answer(message_text)
+
+    # Отправляем кнопки действий в последнем сообщении
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -506,36 +672,15 @@ async def show_submission_detail(message: Union[Message, CallbackQuery, Any], su
             ]
         ]
     )
-    # Если есть файлы, отправляем медиа-группу и отдельное меню
-    if file_ids and bot:
-        try:
-            files = json.loads(file_ids)
-            if files:
-                await send_media_group_with_text(bot, message, files, text, id_, username, status_display, created_at, keyboard)
-                return
-        except Exception as e:
-            logger.error(f"❌ Ошибка при отправке медиа-группы: {e}")
-    # Если нет файлов или произошла ошибка, отправляем обычное текстовое сообщение с кнопками
-    response = f"💬 Сообщение #{id_} от @{username}\n"
-    response += f"📅 Дата: {created_at}\n"
-    response += f"Статус: {status_display}\n\n"
-    response += f"📝 Текст:\n{text}\n\n"
-    if file_ids:
-        files = json.loads(file_ids)
-        response += f"📁 Файлы ({len(files)}):\n"
-        for i, file_id in enumerate(files, 1):
-            response += f"{i}. {file_id}\n"
-    if isinstance(message, Message):
-        await message.answer(response, reply_markup=keyboard)
-    elif isinstance(message, CallbackQuery) and message.message and isinstance(message.message, Message) and hasattr(message.message, 'edit_text'):
-        try:
-            await message.message.edit_text(response, reply_markup=keyboard)
-        except Exception as e:
-            if "message is not modified" not in str(e):
-                logger.error(f"Ошибка при редактировании сообщения: {e}")
-            await message.answer(response, reply_markup=keyboard)
-    elif isinstance(message, CallbackQuery):
-        await message.answer(response, reply_markup=keyboard)
+
+    if bot:
+        await bot.send_message(
+            chat_id,
+            "🎯 Ваши действия:",
+            reply_markup=keyboard
+        )
+    else:
+        await message.answer("🎯 Ваши действия:", reply_markup=keyboard)
 
 
 @router.callback_query(F.data.startswith("solve_"))
@@ -753,7 +898,7 @@ async def handle_cancel_reply(callback: CallbackQuery, state: FSMContext):
 
 @router.message(SubmissionsViewState.waiting_response)
 async def handle_response_text(message: Message, state: FSMContext, bot: Bot):
-    """Обработка текста ответа"""
+    """Обработка текста/файлов ответа"""
     if not message.from_user or message.from_user.id not in ADMIN_IDS:
         return
 
@@ -774,21 +919,64 @@ async def handle_response_text(message: Message, state: FSMContext, bot: Bot):
             await state.clear()
             return
 
+        # Собираем file_ids (фото, документы)
+        file_ids = []
+        if message.photo:
+            file_ids.append(message.photo[-1].file_id)
+        if message.document:
+            file_ids.append(message.document.file_id)
+        # TODO: если поддержка media_group — добавить обработку group_id
+
+        # Получаем текст из сообщения (может быть в text или caption)
+        admin_text = message.text or message.caption or ''
+
         # Отправляем ответ пользователю
         user_id = submission[1]  # user_id из записи
-        response_text = f"💬 Ответ на ваше сообщение #{submission_id}:\n\n{message.text}"
+        current_time = datetime.now().strftime("%d.%m.%Y %H:%M")
+
+        # Уведомление пользователю о новом ответе
+        notification_text = f"💬 Вам поступил ответ на ваше обращение #{submission_id} от {current_time} от администратора.\n\nВы можете посмотреть его в истории обратной связи."
+
+        # Клавиатура для быстрого перехода к истории
+        history_keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(
+                    text="📜 Посмотреть ответ",
+                    callback_data=f"mymsg_{submission_id}"
+                )]
+            ]
+        )
 
         try:
-            await bot.send_message(user_id, response_text)
-            await message.answer("✅ Ответ отправлен пользователю")
+            # Отправляем уведомление пользователю с кнопкой
+            await bot.send_message(user_id, notification_text, reply_markup=history_keyboard)
+
+            # Сохраняем ответ администратора в базу данных (текст и файлы)
+            await submission_db.save_admin_response(submission_id, admin_text, message.from_user.id, file_ids)
+
+            await message.answer("✅ Ответ отправлен пользователю и сохранен в базу данных")
+
+            # Возвращаемся к списку обращений
+            user_data = await state.get_data()
+            submissions = user_data.get('submissions', [])
+            current_page = user_data.get('current_page', 0)
+            status_filter = user_data.get('status_filter', 'all')
+            await show_submissions_list(message, submissions, current_page, status_filter)
+            await state.set_state(SubmissionsViewState.viewing_list)
+
         except Exception as e:
             logger.error(f"Ошибка отправки ответа пользователю: {e}")
             await message.answer("❌ Не удалось отправить ответ пользователю")
+            # Также возвращаемся к списку обращений при ошибке
+            user_data = await state.get_data()
+            submissions = user_data.get('submissions', [])
+            current_page = user_data.get('current_page', 0)
+            status_filter = user_data.get('status_filter', 'all')
+            await show_submissions_list(message, submissions, current_page, status_filter)
+            await state.set_state(SubmissionsViewState.viewing_list)
 
-        # Возвращаемся к детальному просмотру
-        await show_submission_detail(message, submission, bot)
-        await state.set_state(SubmissionsViewState.viewing_detail)
         await state.update_data(current_submission_id=submission_id)
+        # await message.answer("Админ-панель:", reply_markup=get_admin_keyboard()) # Удалено
 
     except Exception as e:
         logger.error(f"Ошибка при обработке ответа: {e}")
