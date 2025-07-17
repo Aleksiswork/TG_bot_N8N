@@ -185,6 +185,8 @@ async def start_feedback(message: Message, state: FSMContext):
 
 Отправьте ваше сообщение (текст + до 5 фото/файлов). Вы можете отправить несколько сообщений подряд, а затем нажать 'Отправить'.
 
+Чтобы продолжить общение по уже созданному обращению, откройте '📜 История', выберете нужное обращение и используйте кнопку 'Ответить'.
+
 ⚠️ **Правила:**
 • Не спамить (не более 5 сообщений подряд за минуту)
 • Не отправлять одинаковые сообщения
@@ -209,18 +211,18 @@ async def show_user_history(message: types.Message, state: FSMContext, bot: Bot)
     await submission_db.init()
     if not submission_db.connection:
         if message:
-            await message.answer("Ошибка: соединение с базой не установлено.")
+            await message.answer("Ошибка: соединение с базой не установлено.", reply_markup=get_main_keyboard(message.from_user.id if message.from_user else 0))
         return
     user_id = message.from_user.id if message.from_user else None
     if not user_id:
-        await message.answer("Ошибка: не удалось определить пользователя.")
+        await message.answer("Ошибка: не удалось определить пользователя.", reply_markup=get_main_keyboard(message.from_user.id if message.from_user else 0))
         return
     async with submission_db.connection.cursor() as cursor:
         await cursor.execute('SELECT id, text_content, file_ids, status, created_at FROM submissions WHERE user_id = ? ORDER BY created_at DESC', (user_id,))
         rows = await cursor.fetchall()
     rows = list(rows) if rows else []
     if not rows:
-        await message.answer("У вас пока нет обращений.")
+        await message.answer("У вас пока нет обращений.", reply_markup=get_main_keyboard(message.from_user.id if message.from_user else 0))
         return
     # Формируем список обращений с кнопками
     buttons = []
@@ -242,7 +244,7 @@ async def handle_feedback_content(message: types.Message, state: FSMContext, bot
     try:
         if not message.from_user:
             logger.error("❌ Не удалось определить пользователя")
-            await message.answer("❌ Ошибка: не удалось определить пользователя")
+            await message.answer("❌ Ошибка: не удалось определить пользователя", reply_markup=get_main_keyboard(message.from_user.id if message.from_user else 0))
             await state.clear()
             return
 
@@ -255,7 +257,7 @@ async def handle_feedback_content(message: types.Message, state: FSMContext, bot
         can_continue, ban_reason = await check_user_activity(user_id, message_text)
 
         if not can_continue:
-            await message.answer(f"🚫 Вы заблокированы автоматически за: {ban_reason}")
+            await message.answer(f"🚫 Вы заблокированы автоматически за: {ban_reason}", reply_markup=get_main_keyboard(user_id))
             return
 
         # Проверяем, не нажал ли пользователь кнопку "Отменить"
@@ -313,7 +315,7 @@ async def handle_feedback_content(message: types.Message, state: FSMContext, bot
                                 ban_text = f"🚫 Вы заблокированы навсегда. Следующее обращение будет доступно через: {left_str}"
                             else:
                                 ban_text = f"🚫 Вы заблокированы до {ban_info['expires_at'][:16]}. Следующее обращение будет доступно через: {left_str}"
-                            await message.answer(ban_text)
+                            await message.answer(ban_text, reply_markup=get_main_keyboard(user_id))
                             return
             # --- Конец блока ---
 
@@ -322,7 +324,7 @@ async def handle_feedback_content(message: types.Message, state: FSMContext, bot
                 await submission_db.init()
             except Exception as e:
                 logger.error(f"❌ Ошибка инициализации БД: {e}")
-                await message.answer("❌ Ошибка подключения к базе данных. Попробуйте позже.")
+                await message.answer("❌ Ошибка подключения к базе данных. Попробуйте позже.", reply_markup=get_main_keyboard(user_id))
                 return
 
             try:
@@ -495,7 +497,7 @@ async def handle_broadcast_content(message: types.Message, state: FSMContext, bo
             await state.clear()
             return
         else:
-            await message.answer("❌ Ошибка: не удалось получить пользователей из базы данных.")
+            await message.answer("❌ Ошибка: не удалось получить пользователей из базы данных.", reply_markup=get_main_keyboard(user_id))
             return
 
     # Накопление фото
@@ -542,10 +544,10 @@ async def handle_broadcast_content(message: types.Message, state: FSMContext, bo
 async def send_db_guide(message: Message, bot: Bot):
     """Отправка гайда по базам данных"""
     if db is None:
-        await message.answer("❌ Ошибка: не удалось инициализировать подключение к базе данных. Обратитесь к администратору.")
+        await message.answer("❌ Ошибка: не удалось инициализировать подключение к базе данных. Обратитесь к администратору.", reply_markup=get_main_keyboard(message.from_user.id if message.from_user else 0))
         return
     if not message.from_user:
-        await message.answer("❌ Ошибка: не удалось определить пользователя")
+        await message.answer("❌ Ошибка: не удалось определить пользователя", reply_markup=get_main_keyboard(0))
         return
 
     await db.save_user(message.from_user)
@@ -560,23 +562,23 @@ async def send_db_guide(message: Message, bot: Bot):
     file_path = os.path.join(FILES_DIR, 'temp.txt')
     try:
         document = FSInputFile(file_path, filename="guide_bd.txt")
-        await message.answer_document(document, caption="📚 Гайд по базам данных")
+        await message.answer_document(document, caption="📚 Гайд по базам данных", reply_markup=get_main_keyboard(message.from_user.id if message.from_user else 0))
     except FileNotFoundError:
-        await message.answer("⚠️ Файл с гайдом временно недоступен.")
+        await message.answer("⚠️ Файл с гайдом временно недоступен.", reply_markup=get_main_keyboard(message.from_user.id if message.from_user else 0))
     except Exception as e:
         logger.error(f"Ошибка при отправке гайда БД: {e}")
-        await message.answer(f"❌ Ошибка: {str(e)}")
+        await message.answer(f"❌ Ошибка: {str(e)}", reply_markup=get_main_keyboard(message.from_user.id if message.from_user else 0))
 
 
 @router.message(F.text == 'Фаервол и ssh-keygen')
 async def send_firewall_guide(message: Message, bot: Bot):
     """Отправка гайда по фаерволу"""
     if not message.from_user:
-        await message.answer("❌ Ошибка: не удалось определить пользователя")
+        await message.answer("❌ Ошибка: не удалось определить пользователя", reply_markup=get_main_keyboard(0))
         return
 
     if db is None:
-        await message.answer("❌ Ошибка: не удалось инициализировать подключение к базе данных. Обратитесь к администратору.")
+        await message.answer("❌ Ошибка: не удалось инициализировать подключение к базе данных. Обратитесь к администратору.", reply_markup=get_main_keyboard(message.from_user.id if message.from_user else 0))
         return
     await db.save_user(message.from_user)
 
@@ -590,35 +592,35 @@ async def send_firewall_guide(message: Message, bot: Bot):
     file_path = os.path.join(FILES_DIR, 'bonus.pdf')
     try:
         document = FSInputFile(file_path, filename="bonus.pdf")
-        await message.answer_document(document, caption="📚 Гайд по фаерволу и ssh-keygen")
+        await message.answer_document(document, caption="📚 Гайд по фаерволу и ssh-keygen", reply_markup=get_main_keyboard(message.from_user.id if message.from_user else 0))
     except FileNotFoundError:
-        await message.answer("⚠️ Файл с гайдом временно недоступен.")
+        await message.answer("⚠️ Файл с гайдом временно недоступен.", reply_markup=get_main_keyboard(message.from_user.id if message.from_user else 0))
     except Exception as e:
         logger.error(f"Ошибка при отправке гайда: {e}")
-        await message.answer(f"❌ Ошибка: {str(e)}")
+        await message.answer(f"❌ Ошибка: {str(e)}", reply_markup=get_main_keyboard(message.from_user.id if message.from_user else 0))
 
 
 @router.message(F.text == 'Установка N8N')
 async def send_n8n_guide(message: Message, bot: Bot):
     """Отправка гайда по N8N"""
     if not message.from_user:
-        await message.answer("❌ Ошибка: не удалось определить пользователя")
+        await message.answer("❌ Ошибка: не удалось определить пользователя", reply_markup=get_main_keyboard(0))
         return
 
     if db is None:
-        await message.answer("❌ Ошибка: не удалось инициализировать подключение к базе данных. Обратитесь к администратору.")
+        await message.answer("❌ Ошибка: не удалось инициализировать подключение к базе данных. Обратитесь к администратору.", reply_markup=get_main_keyboard(message.from_user.id if message.from_user else 0))
         return
     await db.save_user(message.from_user)
 
     file_path = os.path.join(FILES_DIR, 'install.pdf')
     try:
         document = FSInputFile(file_path, filename="install.pdf")
-        await message.answer_document(document, caption="📚 Гайд по установке N8N")
+        await message.answer_document(document, caption="📚 Гайд по установке N8N", reply_markup=get_main_keyboard(message.from_user.id if message.from_user else 0))
     except FileNotFoundError:
-        await message.answer("⚠️ Файл с гайдом временно недоступен.")
+        await message.answer("⚠️ Файл с гайдом временно недоступен.", reply_markup=get_main_keyboard(message.from_user.id if message.from_user else 0))
     except Exception as e:
         logger.error(f"Ошибка при отправке гайда: {e}")
-        await message.answer(f"❌ Ошибка: {str(e)}")
+        await message.answer(f"❌ Ошибка: {str(e)}", reply_markup=get_main_keyboard(message.from_user.id if message.from_user else 0))
 
 # -------------------------------
 # Прочие обработчики
@@ -629,11 +631,11 @@ async def send_n8n_guide(message: Message, bot: Bot):
 async def send_tips(message: Message, bot: Bot):
     """Полезные фишки"""
     if not message.from_user:
-        await message.answer("❌ Ошибка: не удалось определить пользователя")
+        await message.answer("❌ Ошибка: не удалось определить пользователя", reply_markup=get_main_keyboard(0))
         return
 
     if db is None:
-        await message.answer("❌ Ошибка: не удалось инициализировать подключение к базе данных. Обратитесь к администратору.")
+        await message.answer("❌ Ошибка: не удалось инициализировать подключение к базе данных. Обратитесь к администратору.", reply_markup=get_main_keyboard(message.from_user.id if message.from_user else 0))
         return
     await db.save_user(message.from_user)
 
@@ -644,14 +646,14 @@ async def send_tips(message: Message, bot: Bot):
         )
         return
 
-    await message.answer("Здесь будут полезные фишки...")
+    await message.answer("Здесь будут полезные фишки...", reply_markup=get_main_keyboard(message.from_user.id if message.from_user else 0))
 
 
 @router.message(F.text == '⬅️ Назад')
 async def back_to_main(message: Message):
     """Возврат в главное меню"""
     if not message.from_user:
-        await message.answer("❌ Ошибка: не удалось определить пользователя")
+        await message.answer("❌ Ошибка: не удалось определить пользователя", reply_markup=get_main_keyboard(0))
         return
 
     await message.answer(
@@ -669,18 +671,18 @@ async def show_user_history_anytime(message: types.Message, bot: Bot):
     await submission_db.init()
     if not submission_db.connection:
         if message:
-            await message.answer("Ошибка: соединение с базой не установлено.")
+            await message.answer("Ошибка: соединение с базой не установлено.", reply_markup=get_main_keyboard(message.from_user.id if message.from_user else 0))
         return
     user_id = message.from_user.id if message.from_user else None
     if not user_id:
-        await message.answer("Ошибка: не удалось определить пользователя.")
+        await message.answer("Ошибка: не удалось определить пользователя.", reply_markup=get_main_keyboard(message.from_user.id if message.from_user else 0))
         return
     async with submission_db.connection.cursor() as cursor:
         await cursor.execute('SELECT id, text_content, file_ids, status, created_at FROM submissions WHERE user_id = ? ORDER BY created_at DESC', (user_id,))
         rows = await cursor.fetchall()
     rows = list(rows) if rows else []
     if not rows:
-        await message.answer("У вас пока нет обращений.")
+        await message.answer("У вас пока нет обращений.", reply_markup=get_main_keyboard(message.from_user.id if message.from_user else 0))
         return
     # Формируем список обращений с кнопками
     buttons = []
@@ -703,7 +705,7 @@ async def show_user_submission_detail(callback: types.CallbackQuery, state: FSMC
     await submission_db.init()
     if not submission_db.connection:
         if callback.message:
-            await callback.message.answer("Ошибка: соединение с базой не установлено.")
+            await callback.message.answer("Ошибка: соединение с базой не установлено.", reply_markup=get_main_keyboard(callback.from_user.id if callback.from_user else 0))
         await callback.answer()
         return
     if not callback.data:
@@ -715,13 +717,13 @@ async def show_user_submission_detail(callback: types.CallbackQuery, state: FSMC
 
     if not history:
         if callback.message:
-            await callback.message.answer("Обращение не найдено")
+            await callback.message.answer("Обращение не найдено", reply_markup=get_main_keyboard(callback.from_user.id if callback.from_user else 0))
         await callback.answer()
         return
 
         # Отправляем заголовок истории
     header_text = f"💬 История переписки #{sub_id}\n\n"
-    await bot.send_message(callback.from_user.id, header_text)
+    await bot.send_message(callback.from_user.id, header_text, reply_markup=get_main_keyboard(callback.from_user.id if callback.from_user else 0))
 
     # Отправляем каждое сообщение отдельно с его файлами
     for i, (sender_role, text, file_ids, created_at) in enumerate(history, 1):
@@ -748,14 +750,14 @@ async def show_user_submission_detail(callback: types.CallbackQuery, state: FSMC
                     await bot.send_media_group(callback.from_user.id, media_group)
                 else:
                     # Если нет файлов, отправляем только текст
-                    await bot.send_message(callback.from_user.id, message_text)
+                    await bot.send_message(callback.from_user.id, message_text, reply_markup=get_main_keyboard(callback.from_user.id if callback.from_user else 0))
             except Exception as e:
                 logger.error(f"Ошибка отправки медиа-группы: {e}")
                 # Если не удалось отправить медиа-группу, отправляем текст
-                await bot.send_message(callback.from_user.id, message_text)
+                await bot.send_message(callback.from_user.id, message_text, reply_markup=get_main_keyboard(callback.from_user.id if callback.from_user else 0))
         else:
             # Если нет файлов, отправляем только текст
-            await bot.send_message(callback.from_user.id, message_text)
+            await bot.send_message(callback.from_user.id, message_text, reply_markup=get_main_keyboard(callback.from_user.id if callback.from_user else 0))
 
     # Отправляем кнопки действий в последнем сообщении
     actions_keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -812,7 +814,7 @@ async def handle_user_reply_content(message: types.Message, state: FSMContext, b
     try:
         if not message.from_user:
             logger.error("❌ Не удалось определить пользователя")
-            await message.answer("❌ Ошибка: не удалось определить пользователя")
+            await message.answer("❌ Ошибка: не удалось определить пользователя", reply_markup=get_main_keyboard(message.from_user.id if message.from_user else 0))
             await state.clear()
             return
 
@@ -821,7 +823,7 @@ async def handle_user_reply_content(message: types.Message, state: FSMContext, b
         submission_id = user_data.get('submission_id')
 
         if not submission_id:
-            await message.answer("❌ Ошибка: ID обращения не найден")
+            await message.answer("❌ Ошибка: ID обращения не найден", reply_markup=get_main_keyboard(user_id))
             await state.clear()
             return
 
@@ -859,7 +861,7 @@ async def handle_user_reply_content(message: types.Message, state: FSMContext, b
                 # Получаем conversation_id из submissions
                 submission = await submission_db.get_submission_by_id(submission_id)
                 if not submission:
-                    await message.answer("❌ Обращение не найдено")
+                    await message.answer("❌ Обращение не найдено", reply_markup=get_main_keyboard(user_id))
                     await state.clear()
                     return
 
@@ -960,12 +962,12 @@ async def back_to_user_history(callback: types.CallbackQuery, state: FSMContext,
     await submission_db.init()
     if not submission_db.connection:
         if callback.message:
-            await callback.message.answer("Ошибка: соединение с базой не установлено.")
+            await callback.message.answer("Ошибка: соединение с базой не установлено.", reply_markup=get_main_keyboard(callback.from_user.id if callback.from_user else 0))
         await callback.answer()
         return
     user_id = callback.from_user.id if callback.from_user else None
     if not user_id:
-        await callback.answer("Ошибка: не удалось определить пользователя.")
+        await callback.answer("Ошибка: не удалось определить пользователя.", reply_markup=get_main_keyboard(callback.from_user.id if callback.from_user else 0))
         return
     async with submission_db.connection.cursor() as cursor:
         await cursor.execute('SELECT id, text_content, file_ids, status, created_at FROM submissions WHERE user_id = ? ORDER BY created_at DESC', (user_id,))
@@ -973,7 +975,7 @@ async def back_to_user_history(callback: types.CallbackQuery, state: FSMContext,
     rows = list(rows) if rows else []
     if not rows:
         if callback.message:
-            await callback.message.answer("У вас пока нет обращений.")
+            await callback.message.answer("У вас пока нет обращений.", reply_markup=get_main_keyboard(callback.from_user.id if callback.from_user else 0))
         await callback.answer()
         return
     buttons = []

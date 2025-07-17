@@ -58,7 +58,7 @@ async def stats_handler(message: Message):
         return
 
     if db is None:
-        await message.answer("❌ Ошибка: не удалось инициализировать подключение к базе данных. Обратитесь к администратору.")
+        await message.answer("❌ Ошибка: не удалось инициализировать подключение к базе данных. Обратитесь к администратору.", reply_markup=get_admin_keyboard())
         return
     stats = await db.get_users_stats()
     hostname = platform.node()
@@ -90,13 +90,13 @@ async def export_db_csv_handler(message: Message):
 
     try:
         if db is None:
-            await message.answer("❌ Ошибка: не удалось получить пользователей из базы данных.")
+            await message.answer("❌ Ошибка: не удалось получить пользователей из базы данных.", reply_markup=get_admin_keyboard())
             return
         users = await db.get_all_users()
         total_users = len(list(users))
 
         if not users:
-            await message.answer("🔄 База данных пуста")
+            await message.answer("🔄 База данных пуста", reply_markup=get_admin_keyboard())
             return
 
         MAX_FILE_SIZE_MB = 45  # Лимит Telegram
@@ -132,7 +132,7 @@ async def export_db_csv_handler(message: Message):
                 if file_size_mb > MAX_FILE_SIZE_MB:
                     logger.warning(
                         f"Файл part{i} превысил лимит: {file_size_mb:.2f}MB")
-                    await message.answer(f"⚠️ Файл part{i} слишком большой ({file_size_mb:.2f}MB)")
+                    await message.answer(f"⚠️ Файл part{i} слишком большой ({file_size_mb:.2f}MB)", reply_markup=get_admin_keyboard())
                     continue
 
                 # Отправка файла
@@ -144,16 +144,16 @@ async def export_db_csv_handler(message: Message):
 
             except Exception as e:
                 logger.error(f"Ошибка в part{i}: {e}")
-                await message.answer(f"❌ Ошибка в part{i}: {str(e)}")
+                await message.answer(f"❌ Ошибка в part{i}: {str(e)}", reply_markup=get_admin_keyboard())
 
         if sent_files == 0:
-            await message.answer("❌ Не удалось отправить ни одного файла")
+            await message.answer("❌ Не удалось отправить ни одного файла", reply_markup=get_admin_keyboard())
         else:
-            await message.answer(f"✅ Отправлено файлов: {sent_files}")
+            await message.answer(f"✅ Отправлено файлов: {sent_files}", reply_markup=get_admin_keyboard())
 
     except Exception as e:
         logger.error(f"🚨 Критическая ошибка: {e}")
-        await message.answer(f"🚨 Критическая ошибка: {str(e)}")
+        await message.answer(f"🚨 Критическая ошибка: {str(e)}", reply_markup=get_admin_keyboard())
 
 
 @router.message(F.text == '📋 Просмотр записей')
@@ -167,7 +167,7 @@ async def view_submissions_handler(message: Message):
         submissions = await submission_db.get_all_submissions()
 
         if not submissions:
-            await message.answer("📭 База данных submissions пуста")
+            await message.answer("📭 База данных submissions пуста", reply_markup=get_admin_keyboard())
             return
 
         # Формируем сообщение с записями
@@ -355,7 +355,7 @@ async def handle_submissions_callback(callback: CallbackQuery, state: FSMContext
             return
 
         if not submissions:
-            await callback.answer(f"📭 Нет сообщений в категории '{action}'")
+            await callback.answer(f"📭 Нет сообщений в категории '{action}'", reply_markup=get_admin_keyboard())
             return
 
         # Показываем список сообщений (первые 10)
@@ -535,7 +535,7 @@ async def handle_view_submission(callback: CallbackQuery, state: FSMContext):
         submission = await submission_db.get_submission_by_id(submission_id)
 
         if not submission:
-            await callback.answer("❌ Сообщение не найдено")
+            await callback.answer("❌ Сообщение не найдено", reply_markup=get_admin_keyboard())
             return
 
         # Отмечаем как просмотренное
@@ -548,7 +548,7 @@ async def handle_view_submission(callback: CallbackQuery, state: FSMContext):
 
     except Exception as e:
         logger.error(f"Ошибка при просмотре сообщения: {e}")
-        await callback.answer(f"❌ Ошибка: {str(e)}")
+        await callback.answer(f"❌ Ошибка: {str(e)}", reply_markup=get_admin_keyboard())
 
 
 async def send_media_group_with_text(bot: Bot, message: Union[Message, CallbackQuery, Any], files: list, text: str, id_: int, username: str, status_display: str, created_at: str, keyboard: InlineKeyboardMarkup):
@@ -669,6 +669,10 @@ async def show_submission_detail(message: Union[Message, CallbackQuery, Any], su
                     text="📤 Ответить", callback_data=f"reply_{id_}"),
                 InlineKeyboardButton(
                     text="⬅️ Назад", callback_data="back_to_list")
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🚫 Заблокировать пользователя", callback_data=f"ban_user:{user_id}")
             ]
         ]
     )
@@ -1033,7 +1037,7 @@ async def process_broadcast(message: Message, state: FSMContext, bot: Bot):
         return
 
     if db is None:
-        await message.answer("❌ Ошибка: не удалось инициализировать подключение к базе данных. Обратитесь к администратору.")
+        await message.answer("❌ Ошибка: не удалось инициализировать подключение к базе данных. Обратитесь к администратору.", reply_markup=get_admin_keyboard())
         return
     users = await db.get_all_users()
     success = 0
@@ -1109,7 +1113,7 @@ async def banned_list_handler(message: Message):
         banned_users = await banned_db.get_banned_list()
 
         if not banned_users:
-            await message.answer("✅ Нет заблокированных пользователей")
+            await message.answer("✅ Нет заблокированных пользователей", reply_markup=get_admin_keyboard())
             return
 
         response = f"📋 Заблокированные пользователи ({len(banned_users)}):\n\n"
@@ -1138,11 +1142,11 @@ async def banned_list_handler(message: Message):
         if len(banned_users) > 10:
             response += f"... и ещё {len(banned_users) - 10} пользователей"
 
-        await message.answer(response)
+        await message.answer(response, reply_markup=get_admin_keyboard())
 
     except Exception as e:
         logger.error(f"Ошибка получения списка заблокированных: {e}")
-        await message.answer(f"❌ Ошибка: {str(e)}")
+        await message.answer(f"❌ Ошибка: {str(e)}", reply_markup=get_admin_keyboard())
 
 
 @router.message(F.text == '📊 Статистика блокировок')
@@ -1161,11 +1165,11 @@ async def bans_stats_handler(message: Message):
         response += f"🔴 Постоянные блокировки: {stats['permanent']}\n"
         response += f"📅 Заблокировано сегодня: {stats['today']}\n"
 
-        await message.answer(response)
+        await message.answer(response, reply_markup=get_admin_keyboard())
 
     except Exception as e:
         logger.error(f"Ошибка получения статистики блокировок: {e}")
-        await message.answer(f"❌ Ошибка: {str(e)}")
+        await message.answer(f"❌ Ошибка: {str(e)}", reply_markup=get_admin_keyboard())
 
 
 @router.message(F.text == '🔍 Найти пользователя')
@@ -1194,11 +1198,11 @@ async def cleanup_expired_handler(message: Message):
         banned_db = get_banned_db()
         cleaned_count = await banned_db.cleanup_expired_bans()
 
-        await message.answer(f"✅ Очищено {cleaned_count} истекших блокировок")
+        await message.answer(f"✅ Очищено {cleaned_count} истекших блокировок", reply_markup=get_admin_keyboard())
 
     except Exception as e:
         logger.error(f"Ошибка очистки истекших блокировок: {e}")
-        await message.answer(f"❌ Ошибка: {str(e)}")
+        await message.answer(f"❌ Ошибка: {str(e)}", reply_markup=get_admin_keyboard())
 
 
 @router.message(F.text == '⬅️ Назад в админ-панель')
@@ -1243,7 +1247,7 @@ async def process_user_search(message: Message, state: FSMContext):
             ban_info = await get_ban_info(user_id) if is_banned else None
         else:
             # Для username нужно найти ID (упрощенная версия)
-            await message.answer("⚠️ Поиск по username пока не поддерживается. Используйте ID пользователя.")
+            await message.answer("⚠️ Поиск по username пока не поддерживается. Используйте ID пользователя.", reply_markup=get_admin_keyboard())
             await state.clear()
             return
 
@@ -1276,7 +1280,7 @@ async def process_user_search(message: Message, state: FSMContext):
 
     except Exception as e:
         logger.error(f"Ошибка поиска пользователя: {e}")
-        await message.answer(f"❌ Ошибка поиска: {str(e)}")
+        await message.answer(f"❌ Ошибка поиска: {str(e)}", reply_markup=get_admin_keyboard())
         await state.clear()
 
 
@@ -1312,26 +1316,26 @@ async def unban_user_callback(callback: CallbackQuery):
         success = await unban_user(user_id)
 
         if success and callback.message:
-            await callback.answer(f"✅ Пользователь {user_id} разблокирован")
+            await callback.answer(f"✅ Пользователь {user_id} разблокирован", reply_markup=get_admin_keyboard())
         elif callback.message:
-            await callback.answer(f"❌ Ошибка разблокировки пользователя {user_id}")
+            await callback.answer(f"❌ Ошибка разблокировки пользователя {user_id}", reply_markup=get_admin_keyboard())
 
     except Exception as e:
         logger.error(f"Ошибка разблокировки: {e}")
         if callback.message:
-            await callback.answer(f"❌ Ошибка: {str(e)}")
+            await callback.answer(f"❌ Ошибка: {str(e)}", reply_markup=get_admin_keyboard())
 
 
 @router.callback_query(F.data == "cancel_ban")
 async def cancel_ban_callback(callback: CallbackQuery):
     """Отмена блокировки"""
-    await callback.answer("❌ Блокировка отменена")
+    await callback.answer("❌ Блокировка отменена", reply_markup=get_admin_keyboard())
 
 
 @router.callback_query(F.data == "cancel_unban")
 async def cancel_unban_callback(callback: CallbackQuery):
     """Отмена разблокировки"""
-    await callback.answer("❌ Разблокировка отменена")
+    await callback.answer("❌ Разблокировка отменена", reply_markup=get_admin_keyboard())
 
 
 @router.message(BanStates.waiting_ban_reason)
@@ -1360,16 +1364,17 @@ async def process_ban_reason(message: Message, state: FSMContext):
             f"✅ Пользователь {ban_user_id} заблокирован\n\n"
             f"Причина: {reason}\n"
             f"Длительность: {duration}\n"
-            f"Блокировка №{ban_count}"
+            f"Блокировка №{ban_count}",
+            reply_markup=get_admin_keyboard()
         )
 
     except ValueError as e:
         if "администратора" in str(e):
-            await message.answer("❌ Невозможно заблокировать администратора")
+            await message.answer("❌ Невозможно заблокировать администратора", reply_markup=get_admin_keyboard())
         else:
-            await message.answer(f"❌ Ошибка блокировки: {str(e)}")
+            await message.answer(f"❌ Ошибка блокировки: {str(e)}", reply_markup=get_admin_keyboard())
     except Exception as e:
         logger.error(f"Ошибка блокировки: {e}")
-        await message.answer(f"❌ Ошибка блокировки: {str(e)}")
+        await message.answer(f"❌ Ошибка блокировки: {str(e)}", reply_markup=get_admin_keyboard())
 
     await state.clear()
